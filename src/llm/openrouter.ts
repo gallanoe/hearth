@@ -237,6 +237,8 @@ export class OpenRouterProviderV2 implements LLMProvider {
       throw new Error("No response from OpenRouter")
     }
 
+    console.log('Usage - Input:', data.usage.prompt_tokens, 'Output:', data.usage.completion_tokens)
+
     // Check for tool calls
     if (choice.message.tool_calls && choice.message.tool_calls.length > 0) {
       return {

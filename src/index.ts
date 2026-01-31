@@ -16,7 +16,8 @@ const llm = new OpenRouterProviderV2({
   model: Bun.env.OPENROUTER_MODEL_ID ?? "anthropic/claude-opus-4.5",
 })
 
-initializeRooms()
+// Initialize rooms (async for book loading)
+await initializeRooms()
 
 // State
 let currentDay = 0
@@ -25,8 +26,8 @@ let lastResult: DayResult | null = null
 
 // Default budget config
 const defaultBudget = {
-  totalTokens: 50_000,
-  warningThreshold: 10_000,
+  totalTokens: 1_000_000,
+  warningThreshold: 100_000,
 }
 
 const server = Bun.serve({
@@ -65,7 +66,7 @@ const server = Bun.serve({
           reflections: [],
           inboxCount: letterStore.getUnreadCount(),
         }
-        
+
         // Fire and forget - run day asynchronously
         runDay(llm, dayConfig)
           .then((result) => {

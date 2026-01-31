@@ -143,7 +143,7 @@ export async function runDay(
         } else {
           console.log(`\n🔧 ${toolCall.name}`)
           result = await tool.execute(toolCall.args, context)
-          console.log(`   ${result.output.slice(0, 80)}${result.output.length > 80 ? "..." : ""}`)
+          console.log(`   ${result.output.slice(0, 80)}${result.output.length > 250 ? "..." : ""}`)
         }
 
         turn.toolResults.push({ name: toolCall.name, result })

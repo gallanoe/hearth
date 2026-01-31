@@ -86,7 +86,7 @@ const meditate: ExecutableTool = {
     const thoughts = params.thoughts as string
 
     // Store the reflection for future retrieval
-    reflectionStore.add(thoughts, context.currentDay)
+    reflectionStore.add(thoughts, context.currentSession)
 
     console.log(`💭 Reflected on: ${thoughts}`)
 

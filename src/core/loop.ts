@@ -9,6 +9,7 @@ import {
   buildBudgetWarningMessage,
   type WakeUpContext,
 } from "./context"
+import { shouldCompact, compactMessages } from "./compaction"
 
 /**
  * Configuration for running a day.
@@ -70,7 +71,7 @@ export async function runDay(
 
   // Build initial prompt
   const systemPrompt = buildSystemPrompt()
-  const messages: Message[] = []
+  let messages: Message[] = []
 
   // Wake up message
   const startRoom = roomRegistry.get("bedroom")!
@@ -104,6 +105,20 @@ export async function runDay(
     // Record usage
     budget.recordUsage(response.usage.inputTokens, response.usage.outputTokens)
     context.budget = budget.getState()
+
+    // Check if context compaction is needed (separate from daily budget)
+    if (shouldCompact(response.usage.inputTokens)) {
+      const originalTokens = response.usage.inputTokens
+      const result = await compactMessages(messages, llm)
+      messages = result.messages
+
+      // Log context sizes: original vs estimated new size
+      // New size is roughly the summary tokens + tokens from recent messages
+      // (exact count will be visible on next turn)
+      console.log(`\n📦 Context compaction triggered`)
+      console.log(`   Original: ${Math.round(originalTokens / 1000)}k tokens (${result.originalMessageCount} messages)`)
+      console.log(`   Compacted: ~${Math.round(result.summaryTokens / 1000)}k summary + recent (${result.compactedMessageCount} messages)`)
+    }
 
     // Initialize turn record
     const turn: TurnRecord = {

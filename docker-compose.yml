@@ -1,0 +1,39 @@
+services:
+  hearth:
+    build: .
+    ports:
+      - "3000:3000"
+    environment:
+      - DATABASE_URL=postgres://hearth://hearth@db:5432/hearth
+      - OPENROUTER_API_KEY=${OPENROUTER_API_KEY}
+      - OPENROUTER_MODEL_ID=${OPENROUTER_MODEL_ID}
+    depends_on:
+      db:
+        condition: service_healthy
+    networks:
+      - hearth-internal
+      - hearth-external
+
+db:
+  image: postgres:16-alpine
+  environment:
+    - POSTGRES_USER=hearth
+    - POSTGRES_PASSWORD=hearth
+    - POSTGRES_DB=hearth
+  volumes:
+    - hearth-data:/var/lib/postgresql/data
+  healthcheck:
+    test: ["CMD-SHELL", "pg_isready -U hearth"]
+    interval: 5s
+    timeout: 5s
+    retries: 5
+  networks:
+    - hearth-internal
+
+volumes:
+  hearth-data:
+
+networks:
+  hearth-internal:
+    internal: true 
+  hearth-external:

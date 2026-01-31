@@ -118,7 +118,7 @@ export async function runDay(
 
     // Log assistant response
     if (response.content) {
-      console.log(`\n💭 ${response.content.slice(0, 100)}${response.content.length > 100 ? "..." : ""}`)
+      console.log(`\n💭 ${response.content}\n`)
     }
 
     // Handle tool calls

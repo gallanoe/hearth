@@ -15,6 +15,47 @@ export interface OpenRouterConfig {
   siteUrl?: string
 }
 
+// Types for direct API approach
+interface OpenAIChatMessage {
+  role: "system" | "user" | "assistant" | "tool"
+  content: string | null
+  tool_calls?: {
+    id: string
+    type: "function"
+    function: { name: string; arguments: string }
+  }[]
+  tool_call_id?: string
+}
+
+interface OpenAITool {
+  type: "function"
+  function: {
+    name: string
+    description: string
+    parameters: Record<string, unknown>
+  }
+}
+
+interface OpenAIResponse {
+  id: string
+  choices: {
+    message: {
+      role: "assistant"
+      content: string | null
+      tool_calls?: {
+        id: string
+        type: "function"
+        function: { name: string; arguments: string }
+      }[]
+    }
+    finish_reason: "stop" | "tool_calls" | "length"
+  }[]
+  usage: {
+    prompt_tokens: number
+    completion_tokens: number
+  }
+}
+
 export class OpenRouterProvider implements LLMProvider {
   private client: OpenRouter
   private model: string
@@ -96,6 +137,133 @@ export class OpenRouterProvider implements LLMProvider {
       usage: {
         inputTokens: response.usage?.inputTokens ?? 0,
         outputTokens: response.usage?.outputTokens ?? 0,
+      },
+    }
+  }
+}
+
+/**
+ * Alternative provider using direct fetch to OpenRouter's OpenAI-compatible API.
+ * Avoids the SDK's fromChatMessages conversion which has issues with tool messages.
+ */
+export class OpenRouterProviderV2 implements LLMProvider {
+  private apiKey: string
+  private model: string
+  private maxTokens: number
+  private appName?: string
+  private siteUrl?: string
+
+  constructor(config: OpenRouterConfig) {
+    this.apiKey = config.apiKey
+    this.model = config.model ?? "anthropic/claude-sonnet-4"
+    this.maxTokens = config.maxTokens ?? 4096
+    this.appName = config.appName
+    this.siteUrl = config.siteUrl
+  }
+
+  async send(
+    system: string,
+    messages: Message[],
+    tools?: ToolDefinition[]
+  ): Promise<LLMResponse> {
+    // Build messages in OpenAI chat format
+    const chatMessages: OpenAIChatMessage[] = [
+      { role: "system", content: system },
+      ...messages.map((m): OpenAIChatMessage => {
+        if (m.role === "tool") {
+          return {
+            role: "tool",
+            content: m.content ?? "",
+            tool_call_id: m.toolCallId,
+          }
+        }
+        if (m.role === "assistant" && m.toolCalls && m.toolCalls.length > 0) {
+          return {
+            role: "assistant",
+            content: m.content,
+            tool_calls: m.toolCalls.map((tc) => ({
+              id: tc.id,
+              type: "function" as const,
+              function: {
+                name: tc.name,
+                arguments: JSON.stringify(tc.args),
+              },
+            })),
+          }
+        }
+        return {
+          role: m.role as "user" | "assistant",
+          content: m.content,
+        }
+      }),
+    ]
+
+    // Convert tool definitions to OpenAI format
+    const openaiTools: OpenAITool[] | undefined = tools?.map((t) => ({
+      type: "function" as const,
+      function: {
+        name: t.name,
+        description: t.description,
+        parameters: t.inputSchema.toJSONSchema(),
+      },
+    }))
+
+    // Make direct API request to OpenRouter
+    const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Authorization": `Bearer ${this.apiKey}`,
+        ...(this.siteUrl && { "HTTP-Referer": this.siteUrl }),
+        ...(this.appName && { "X-Title": this.appName }),
+      },
+      body: JSON.stringify({
+        model: this.model,
+        messages: chatMessages,
+        max_tokens: this.maxTokens,
+        ...(openaiTools && openaiTools.length > 0 && { tools: openaiTools }),
+      }),
+    })
+
+    if (!response.ok) {
+      const errorText = await response.text()
+      throw new Error(`OpenRouter API error: ${response.status} ${errorText}`)
+    }
+
+    const data = (await response.json()) as OpenAIResponse
+    const choice = data.choices[0]
+
+    if (!choice) {
+      throw new Error("No response from OpenRouter")
+    }
+
+    // Check for tool calls
+    if (choice.message.tool_calls && choice.message.tool_calls.length > 0) {
+      return {
+        content: choice.message.content,
+        toolCalls: choice.message.tool_calls.map((tc) => ({
+          id: tc.id,
+          name: tc.function.name,
+          // Handle empty string for tools with no arguments
+          args: tc.function.arguments
+            ? (JSON.parse(tc.function.arguments) as Record<string, unknown>)
+            : {},
+        })),
+        stopReason: "tool_calls",
+        usage: {
+          inputTokens: data.usage.prompt_tokens,
+          outputTokens: data.usage.completion_tokens,
+        },
+      }
+    }
+
+    return {
+      content: choice.message.content,
+      toolCalls: [],
+      stopReason: choice.finish_reason === "length" ? "length" : "stop",
+      usage: {
+        inputTokens: data.usage.prompt_tokens,
+        outputTokens: data.usage.completion_tokens,
       },
     }
   }

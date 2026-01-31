@@ -69,8 +69,8 @@ export function buildWakeUpMessage(context: WakeUpContext): string {
   // Inbox status
   if (context.inboxCount > 0) {
     parts.push("")
-    const plural = context.inboxCount === 1 ? "message" : "messages"
-    parts.push(`${context.inboxCount} unread ${plural} in the office.`)
+    const plural = context.inboxCount === 1 ? "letter" : "letters"
+    parts.push(`${context.inboxCount} unread ${plural} in the entryway.`)
   }
 
   return parts.join("\n")

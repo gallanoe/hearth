@@ -1,6 +1,7 @@
-import { OpenRouterProvider } from "./llm/openrouter"
+import { OpenRouterProvider, OpenRouterProviderV2 } from "./llm/openrouter"
 import { initializeRooms } from "./rooms"
 import { runDay, type DayConfig, type DayResult } from "./core/loop"
+import { letterStore } from "./data/letters"
 
 // Initialize on startup
 const apiKey = Bun.env.OPENROUTER_API_KEY
@@ -9,10 +10,10 @@ if (!apiKey) {
   process.exit(1)
 }
 
-const llm = new OpenRouterProvider({
+const llm = new OpenRouterProviderV2({
   apiKey,
   appName: "Hearth",
-  model: "anthropic/claude-sonnet-4",
+  model: Bun.env.OPENROUTER_MODEL_ID ?? "anthropic/claude-opus-4.5",
 })
 
 initializeRooms()
@@ -49,7 +50,7 @@ const server = Bun.serve({
     },
 
     "/api/wake": {
-      POST: async () => {
+      POST: () => {
         if (isRunning) {
           return Response.json({ error: "Agent is already awake" }, { status: 400 })
         }
@@ -62,44 +63,75 @@ const server = Bun.serve({
           budget: defaultBudget,
           intentions: lastResult?.intentions ?? null,
           reflections: [],
-          inboxCount: 0,
+          inboxCount: letterStore.getUnreadCount(),
         }
-
-        console.log("\n🏠 Hearth")
-        console.log("   A home for AI\n")
-
-        try {
-          lastResult = await runDay(llm, dayConfig)
-          isRunning = false
-
-          return Response.json({
-            success: true,
-            day: currentDay,
-            endReason: lastResult.endReason,
-            totalTokensUsed: lastResult.totalTokensUsed,
-            turns: lastResult.turns.length,
-            intentions: lastResult.intentions,
+        
+        // Fire and forget - run day asynchronously
+        runDay(llm, dayConfig)
+          .then((result) => {
+            lastResult = result
+            isRunning = false
+            console.log(`\n✅ Day ${currentDay} completed: ${result.endReason}`)
           })
-        } catch (error) {
-          isRunning = false
-          console.error("Error running day:", error)
-          return Response.json(
-            { error: "Day failed", details: String(error) },
-            { status: 500 }
-          )
-        }
+          .catch((error) => {
+            isRunning = false
+            console.error("Error running day:", error)
+          })
+
+        // Return immediately
+        return Response.json({
+          success: true,
+          message: "Agent is waking up",
+          day: currentDay,
+        })
       },
     },
 
-    "/api/messages": {
+    "/api/inbox": {
       GET: () => {
-        // TODO: fetch from inbox
-        return Response.json({ messages: [] })
+        const letters = letterStore.getInbox().map((l) => ({
+          id: l.id,
+          content: l.content,
+          sentAt: l.sentAt.toISOString(),
+          readAt: l.readAt?.toISOString() ?? null,
+        }))
+        return Response.json({ letters })
       },
       POST: async (req) => {
         const body = (await req.json()) as { content: string }
-        // TODO: persist to inbox
-        return Response.json({ received: true, content: body.content })
+        if (!body.content || body.content.trim().length === 0) {
+          return Response.json({ error: "Content is required" }, { status: 400 })
+        }
+        const letter = letterStore.addInbound(body.content.trim())
+        return Response.json({
+          id: letter.id,
+          sentAt: letter.sentAt.toISOString(),
+        })
+      },
+    },
+
+    "/api/outbox": {
+      GET: () => {
+        const letters = letterStore.getOutbox().map((l) => ({
+          id: l.id,
+          content: l.content,
+          sentAt: l.sentAt.toISOString(),
+          readAt: l.readAt?.toISOString() ?? null,
+        }))
+        return Response.json({ letters })
+      },
+    },
+
+    "/api/outbox/:id": {
+      DELETE: (req) => {
+        const letter = letterStore.markOutboundPickedUp(req.params.id)
+        if (!letter) {
+          return Response.json({ error: "Letter not found" }, { status: 404 })
+        }
+        return Response.json({
+          id: letter.id,
+          pickedUpAt: new Date().toISOString(),
+        })
       },
     },
 

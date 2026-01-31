@@ -4,13 +4,18 @@
   "type": "module",
   "private": true,
   "devDependencies": {
-    "@types/bun": "latest"
+    "@types/bun": "latest",
+    "@types/jsdom": "^27.0.0",
+    "@types/turndown": "^5.0.6"
   },
   "peerDependencies": {
     "typescript": "^5"
   },
   "dependencies": {
+    "@mozilla/readability": "^0.6.0",
     "@openrouter/sdk": "^0.5.1",
+    "jsdom": "^27.4.0",
+    "turndown": "^7.2.2",
     "zod": "^4.3.6"
   }
 }

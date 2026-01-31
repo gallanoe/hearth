@@ -1,0 +1,230 @@
+import type { LLMProvider, Message, ToolCall } from "../llm/types"
+import type { AgentContext, ToolResult } from "../rooms/types"
+import { roomRegistry } from "../rooms/registry"
+import { BudgetTracker, type BudgetConfig } from "./budget"
+import {
+  buildSystemPrompt,
+  buildWakeUpMessage,
+  buildRoomEntryMessage,
+  buildBudgetWarningMessage,
+  type WakeUpContext,
+} from "./context"
+
+/**
+ * Configuration for running a day.
+ */
+export interface DayConfig {
+  dayNumber: number
+  budget: BudgetConfig
+  intentions: string | null // From previous day's sleep
+  reflections: string[] // Relevant past reflections
+  inboxCount: number
+}
+
+/**
+ * Result of running a day.
+ */
+export interface DayResult {
+  dayNumber: number
+  endReason: "sleep" | "budget_exhausted"
+  totalTokensUsed: number
+  intentions: string | null // Set if agent slept intentionally
+  turns: TurnRecord[]
+}
+
+/**
+ * Record of a single turn.
+ */
+export interface TurnRecord {
+  sequence: number
+  room: string
+  inputTokens: number
+  outputTokens: number
+  assistantMessage: string | null
+  toolCalls: ToolCall[]
+  toolResults: { name: string; result: ToolResult }[]
+}
+
+/**
+ * Runs a single day in the agent's life.
+ */
+export async function runDay(
+  llm: LLMProvider,
+  config: DayConfig
+): Promise<DayResult> {
+  const budget = new BudgetTracker(config.budget)
+  const turns: TurnRecord[] = []
+  let turnSequence = 0
+
+  // Initialize agent context
+  const context: AgentContext = {
+    currentRoom: "bedroom",
+    currentDay: config.dayNumber,
+    budget: budget.getState(),
+    intentions: null,
+    signals: {
+      requestedSleep: false,
+      requestedMove: null,
+    },
+  }
+
+  // Build initial prompt
+  const systemPrompt = buildSystemPrompt()
+  const messages: Message[] = []
+
+  // Wake up message
+  const startRoom = roomRegistry.get("bedroom")!
+  const wakeUpContext: WakeUpContext = {
+    day: config.dayNumber,
+    budget: budget.getState(),
+    currentRoom: startRoom,
+    intentions: config.intentions,
+    reflections: config.reflections,
+    inboxCount: config.inboxCount,
+  }
+
+  messages.push({
+    role: "user",
+    content: buildWakeUpMessage(wakeUpContext),
+  })
+
+  console.log(`\n☀️  Day ${config.dayNumber} begins`)
+  console.log(`📍 Bedroom`)
+
+  // Main loop
+  while (!budget.isExhausted() && !context.signals.requestedSleep) {
+    turnSequence++
+
+    // Get available tools for current room
+    const tools = roomRegistry.getToolDefinitions(context.currentRoom)
+
+    // Call LLM
+    const response = await llm.send(systemPrompt, messages, tools)
+
+    // Record usage
+    budget.recordUsage(response.usage.inputTokens, response.usage.outputTokens)
+    context.budget = budget.getState()
+
+    // Initialize turn record
+    const turn: TurnRecord = {
+      sequence: turnSequence,
+      room: context.currentRoom,
+      inputTokens: response.usage.inputTokens,
+      outputTokens: response.usage.outputTokens,
+      assistantMessage: response.content,
+      toolCalls: response.toolCalls,
+      toolResults: [],
+    }
+
+    // Log assistant response
+    if (response.content) {
+      console.log(`\n💭 ${response.content.slice(0, 100)}${response.content.length > 100 ? "..." : ""}`)
+    }
+
+    // Handle tool calls
+    if (response.toolCalls.length > 0) {
+      // Add assistant message with tool calls
+      messages.push({
+        role: "assistant",
+        content: response.content,
+        toolCalls: response.toolCalls,
+      })
+
+      // Execute each tool
+      for (const toolCall of response.toolCalls) {
+        const tool = roomRegistry.getExecutableTool(context.currentRoom, toolCall.name)
+
+        let result: ToolResult
+        if (!tool) {
+          result = {
+            success: false,
+            output: `Unknown tool: ${toolCall.name}`,
+          }
+        } else {
+          console.log(`\n🔧 ${toolCall.name}`)
+          result = await tool.execute(toolCall.args, context)
+          console.log(`   ${result.output.slice(0, 80)}${result.output.length > 80 ? "..." : ""}`)
+        }
+
+        turn.toolResults.push({ name: toolCall.name, result })
+
+        // Add tool result message
+        messages.push({
+          role: "tool",
+          content: result.output,
+          toolCallId: toolCall.id,
+        })
+
+        // Handle room state updates
+        if (result.stateUpdate) {
+          roomRegistry.updateRoomState(context.currentRoom, result.stateUpdate)
+        }
+      }
+
+      // Handle room transition
+      if (context.signals.requestedMove) {
+        const targetRoom = context.signals.requestedMove
+        context.signals.requestedMove = null
+
+        // Execute onExit for current room
+        await roomRegistry.executeOnExit(context.currentRoom, context)
+
+        // Move to new room
+        context.currentRoom = targetRoom
+        console.log(`\n📍 ${roomRegistry.get(targetRoom)?.name ?? targetRoom}`)
+
+        // Execute onEnter for new room
+        const enterMessage = await roomRegistry.executeOnEnter(targetRoom, context)
+
+        // Build room entry message
+        const newRoom = roomRegistry.get(targetRoom)!
+        const roomMessage = buildRoomEntryMessage(newRoom, enterMessage ?? undefined)
+
+        messages.push({
+          role: "user",
+          content: roomMessage,
+        })
+      }
+    } else {
+      // No tool calls, just a text response
+      messages.push({
+        role: "assistant",
+        content: response.content,
+      })
+
+      // Prompt for action
+      messages.push({
+        role: "user",
+        content: "What would you like to do?",
+      })
+    }
+
+    turns.push(turn)
+
+    // Check for budget warning
+    if (budget.shouldWarn()) {
+      console.log(`\n⚠️  Budget warning issued`)
+      messages.push({
+        role: "user",
+        content: buildBudgetWarningMessage(budget.getState()),
+      })
+    }
+  }
+
+  // Determine end reason
+  const endReason = context.signals.requestedSleep ? "sleep" : "budget_exhausted"
+
+  if (endReason === "sleep") {
+    console.log(`\n🌙 Day ${config.dayNumber} ends. The agent sleeps.`)
+  } else {
+    console.log(`\n💫 Day ${config.dayNumber} ends. Budget exhausted—the agent passes out.`)
+  }
+
+  return {
+    dayNumber: config.dayNumber,
+    endReason,
+    totalTokensUsed: budget.getState().spent,
+    intentions: context.intentions,
+    turns,
+  }
+}

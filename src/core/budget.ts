@@ -1,5 +1,5 @@
 /**
- * Budget configuration for a day.
+ * Budget configuration for a session.
  */
 export interface BudgetConfig {
     totalTokens: number
@@ -18,7 +18,7 @@ export interface BudgetConfig {
   }
   
   /**
-   * Tracks token budget for a single day.
+   * Tracks token budget for a single session.
    */
   export class BudgetTracker {
     private total: number

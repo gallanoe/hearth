@@ -6,7 +6,7 @@ import type { z } from "zod"
  */
 export interface AgentContext {
   currentRoom: string
-  currentDay: number
+  currentSession: number
   budget: {
     total: number
     spent: number

@@ -1,6 +1,6 @@
 import { OpenRouterProvider, OpenRouterProviderV2 } from "./llm/openrouter"
 import { initializeRooms } from "./rooms"
-import { runDay, type DayConfig, type DayResult } from "./core/loop"
+import { runSession, type SessionConfig, type SessionResult } from "./core/loop"
 import { letterStore } from "./data/letters"
 
 // Initialize on startup
@@ -20,9 +20,9 @@ const llm = new OpenRouterProviderV2({
 await initializeRooms()
 
 // State
-let currentDay = 0
+let currentSession = 0
 let isRunning = false
-let lastResult: DayResult | null = null
+let lastResult: SessionResult | null = null
 
 // Default budget config
 const defaultBudget = {
@@ -38,7 +38,7 @@ const server = Bun.serve({
       GET: () =>
         Response.json({
           status: isRunning ? "awake" : "asleep",
-          currentDay,
+          currentSession,
           lastResult: lastResult
             ? {
                 endReason: lastResult.endReason,
@@ -57,33 +57,33 @@ const server = Bun.serve({
         }
 
         isRunning = true
-        currentDay++
+        currentSession++
 
-        const dayConfig: DayConfig = {
-          dayNumber: currentDay,
+        const sessionConfig: SessionConfig = {
+          sessionNumber: currentSession,
           budget: defaultBudget,
           intentions: lastResult?.intentions ?? null,
           reflections: [],
           inboxCount: letterStore.getUnreadCount(),
         }
 
-        // Fire and forget - run day asynchronously
-        runDay(llm, dayConfig)
+        // Fire and forget - run session asynchronously
+        runSession(llm, sessionConfig)
           .then((result) => {
             lastResult = result
             isRunning = false
-            console.log(`\n✅ Day ${currentDay} completed: ${result.endReason}`)
+            console.log(`\n✅ Session ${currentSession} completed: ${result.endReason}`)
           })
           .catch((error) => {
             isRunning = false
-            console.error("Error running day:", error)
+            console.error("Error running session:", error)
           })
 
         // Return immediately
         return Response.json({
           success: true,
           message: "Agent is waking up",
-          day: currentDay,
+          session: currentSession,
         })
       },
     },
@@ -136,9 +136,9 @@ const server = Bun.serve({
       },
     },
 
-    "/api/days/:id": {
+    "/api/sessions/:id": {
       GET: (req) => {
-        // TODO: fetch day log from db
+        // TODO: fetch session log from db
         return Response.json({ id: req.params.id, turns: [] })
       },
     },

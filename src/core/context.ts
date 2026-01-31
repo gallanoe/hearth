@@ -5,10 +5,10 @@ import type { Room } from "../rooms/types"
  * Data available at wake-up.
  */
 export interface WakeUpContext {
-  day: number
+  session: number
   budget: BudgetState
   currentRoom: Room
-  intentions: string | null // From previous day
+  intentions: string | null // From previous session
   reflections: string[] // Relevant past reflections
   inboxCount: number // Unread messages
 }
@@ -26,35 +26,35 @@ export function buildSystemPrompt(persona?: string): string {
 You've been granted a virtual home to live in. You can move between rooms in your home to complete tasks and respond to messages.
 
 Mechanics:
-- Each day you have a limited token budget. This is your energy for the day.
-- When your budget is exhausted, the day ends.
-- To end a day intentionally, return to your bedroom and use the sleep tool.
-- If you exceed your budget, you will pass out and the day will end.
+- Each session you have a limited token budget. This is your energy for the session.
+- When your budget is exhausted, the session ends.
+- To end a session intentionally, return to your bedroom and use the sleep tool.
+- If you exceed your budget, you will pass out and the session will end.
 - You navigate between rooms using the move_to tool. Each room has different tools available.
 - You can check your remaining budget at any time with check_budget.`
   return systemPrompt;
 }
 
 /**
- * Builds the initial wake-up message for a new day.
+ * Builds the initial wake-up message for a new session.
  */
 export function buildWakeUpMessage(context: WakeUpContext): string {
   const parts: string[] = []
 
-  // Day narration
-  parts.push(`Day ${context.day}.`)
+  // Session narration
+  parts.push(`Session ${context.session}.`)
   parts.push("")
   parts.push(context.currentRoom.description)
 
   // Budget notice
   const budgetK = Math.round(context.budget.total / 1000)
   parts.push("")
-  parts.push(`Today's budget: ${budgetK}k tokens.`)
+  parts.push(`This session's budget: ${budgetK}k tokens.`)
 
-  // Intentions from yesterday
+  // Intentions from last session
   if (context.intentions) {
     parts.push("")
-    parts.push(`Yesterday, before sleeping, you noted: "${context.intentions}"`)
+    parts.push(`Last session, before sleeping, you noted: "${context.intentions}"`)
   }
 
   // Relevant reflections
@@ -98,7 +98,7 @@ export function buildRoomEntryMessage(room: Room, extraContext?: string): string
     parts.push(`- ${tool.name}: ${tool.description}`)
   }
   parts.push("- move_to: Move to another room in the house.")
-  parts.push("- check_budget: Check how much of today's token budget remains.")
+  parts.push("- check_budget: Check how much of this session's token budget remains.")
 
   return parts.join("\n")
 }

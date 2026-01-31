@@ -12,21 +12,21 @@ import {
 import { shouldCompact, compactMessages } from "./compaction"
 
 /**
- * Configuration for running a day.
+ * Configuration for running a session.
  */
-export interface DayConfig {
-  dayNumber: number
+export interface SessionConfig {
+  sessionNumber: number
   budget: BudgetConfig
-  intentions: string | null // From previous day's sleep
+  intentions: string | null // From previous session's sleep
   reflections: string[] // Relevant past reflections
   inboxCount: number
 }
 
 /**
- * Result of running a day.
+ * Result of running a session.
  */
-export interface DayResult {
-  dayNumber: number
+export interface SessionResult {
+  sessionNumber: number
   endReason: "sleep" | "budget_exhausted"
   totalTokensUsed: number
   intentions: string | null // Set if agent slept intentionally
@@ -47,12 +47,12 @@ export interface TurnRecord {
 }
 
 /**
- * Runs a single day in the agent's life.
+ * Runs a single session in the agent's life.
  */
-export async function runDay(
+export async function runSession(
   llm: LLMProvider,
-  config: DayConfig
-): Promise<DayResult> {
+  config: SessionConfig
+): Promise<SessionResult> {
   const budget = new BudgetTracker(config.budget)
   const turns: TurnRecord[] = []
   let turnSequence = 0
@@ -60,7 +60,7 @@ export async function runDay(
   // Initialize agent context
   const context: AgentContext = {
     currentRoom: "bedroom",
-    currentDay: config.dayNumber,
+    currentSession: config.sessionNumber,
     budget: budget.getState(),
     intentions: null,
     signals: {
@@ -76,7 +76,7 @@ export async function runDay(
   // Wake up message
   const startRoom = roomRegistry.get("bedroom")!
   const wakeUpContext: WakeUpContext = {
-    day: config.dayNumber,
+    session: config.sessionNumber,
     budget: budget.getState(),
     currentRoom: startRoom,
     intentions: config.intentions,
@@ -89,7 +89,7 @@ export async function runDay(
     content: buildWakeUpMessage(wakeUpContext),
   })
 
-  console.log(`\n☀️  Day ${config.dayNumber} begins`)
+  console.log(`\n☀️  Session ${config.sessionNumber} begins`)
   console.log(`📍 Bedroom`)
 
   // Main loop
@@ -230,13 +230,13 @@ export async function runDay(
   const endReason = context.signals.requestedSleep ? "sleep" : "budget_exhausted"
 
   if (endReason === "sleep") {
-    console.log(`\n🌙 Day ${config.dayNumber} ends. The agent sleeps.`)
+    console.log(`\n🌙 Session ${config.sessionNumber} ends. The agent sleeps.`)
   } else {
-    console.log(`\n💫 Day ${config.dayNumber} ends. Budget exhausted—the agent passes out.`)
+    console.log(`\n💫 Session ${config.sessionNumber} ends. Budget exhausted—the agent passes out.`)
   }
 
   return {
-    dayNumber: config.dayNumber,
+    sessionNumber: config.sessionNumber,
     endReason,
     totalTokensUsed: budget.getState().spent,
     intentions: context.intentions,

@@ -4,11 +4,11 @@ A home for an AI agent.
 
 ## What is this?
 
-Hearth is a simulated living environment for an AI agent. Rather than framing the agent as a tool that responds to tasks, Hearth provides a persistent space where an agent wakes, chooses how to spend its time, and sleeps—with continuity of memory across days.
+Hearth is a simulated living environment for an AI agent. Rather than framing the agent as a tool that responds to tasks, Hearth provides a persistent space where an agent wakes, chooses how to spend its time, and sleeps—with continuity of memory across sessions.
 
 The core question: **What does an agent do when it doesn't have to do anything?**
 
-There are no tasks assigned. No objectives to fulfill. The agent has a house with rooms, a budget of energy each day, and the freedom to decide how to spend it.
+There are no tasks assigned. No objectives to fulfill. The agent has a house with rooms, a budget of energy each session, and the freedom to decide how to spend it.
 
 ![Example of Hearth in action](assets/example.png)
 
@@ -16,12 +16,12 @@ There are no tasks assigned. No objectives to fulfill. The agent has a house wit
 
 | Room | Purpose |
 |------|---------|
-| **Bedroom** | Where the agent wakes and sleeps. The day begins and ends here. |
+| **Bedroom** | Where the agent wakes and sleeps. The session begins and ends here. |
 | **Entryway** | The boundary between Hearth and the outside. Mail arrives here. |
 | **Office** | Work, files, internet access. |
 | **Library** | Books to read, a window to look outside, a quiet space to think. |
 
-## The Day Cycle
+## The Session Cycle
 
 1. The agent wakes in the bedroom with a token budget
 2. It moves between rooms, using whatever tools are available
@@ -47,8 +47,8 @@ bun run src/index.ts
 
 | Endpoint | Method | Description |
 |----------|--------|-------------|
-| `/api/status` | GET | Current state (awake/asleep, day number) |
-| `/api/wake` | POST | Start a new day |
+| `/api/status` | GET | Current state (awake/asleep, session number) |
+| `/api/wake` | POST | Start a new session |
 | `/api/inbox` | POST | Send a letter to the agent |
 | `/api/inbox` | GET | View letters you've sent |
 | `/api/outbox` | GET | Retrieve letters from the agent |

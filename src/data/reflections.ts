@@ -7,7 +7,7 @@ export interface Reflection {
   id: string
   content: string
   createdAt: Date
-  dayNumber: number
+  sessionNumber: number
 }
 
 /**
@@ -27,12 +27,12 @@ export class ReflectionStore {
   /**
    * Add a new reflection from meditation.
    */
-  add(content: string, dayNumber: number): Reflection {
+  add(content: string, sessionNumber: number): Reflection {
     const reflection: Reflection = {
       id: generateId(),
       content,
       createdAt: new Date(),
-      dayNumber,
+      sessionNumber,
     }
     this.reflections.set(reflection.id, reflection)
     return reflection
@@ -56,11 +56,11 @@ export class ReflectionStore {
   }
 
   /**
-   * Get reflections from a specific day.
+   * Get reflections from a specific session.
    */
-  getByDay(dayNumber: number): Reflection[] {
+  getBySession(sessionNumber: number): Reflection[] {
     return Array.from(this.reflections.values())
-      .filter((r) => r.dayNumber === dayNumber)
+      .filter((r) => r.sessionNumber === sessionNumber)
       .sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime())
   }
 

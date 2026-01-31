@@ -2,7 +2,7 @@ import type { LLMProvider, Message } from "../llm/types"
 
 /**
  * Context window configuration.
- * These are separate from the daily token budget.
+ * These are separate from the session token budget.
  */
 export const CONTEXT_WINDOW = 200_000 // Model's maximum context size
 export const COMPACTION_THRESHOLD = 0.9 // Trigger compaction at 90%
@@ -24,9 +24,9 @@ export function shouldCompact(inputTokens: number): boolean {
  * The prompt used to generate a summary of older messages.
  * Framed around Hearth's concept of an agent living in a home with memory continuity.
  */
-const SUMMARIZATION_PROMPT = `You are creating a memory summary for an AI agent living in Hearth—a simulated home where the agent wakes, moves between rooms, and sleeps across days.
+const SUMMARIZATION_PROMPT = `You are creating a memory summary for an AI agent living in Hearth—a simulated home where the agent wakes, moves between rooms, and sleeps across sessions.
 
-Summarize what happened earlier in this day. The summary will be shown directly to the agent, so write in second person ("You visited the library and read..."). Preserve:
+Summarize what happened earlier in this session. The summary will be shown directly to the agent, so write in second person ("You visited the library and read..."). Preserve:
 
 - Where you went and what you did in each room
 - Letters read or written, and their content/who they were from
@@ -35,7 +35,7 @@ Summarize what happened earlier in this day. The summary will be shown directly 
 - Meaningful discoveries or information learned
 - Any ongoing activities or interests being pursued
 
-Be specific about names, details, and outcomes. Keep it concise but complete enough to continue the day with full context.
+Be specific about names, details, and outcomes. Keep it concise but complete enough to continue the session with full context.
 
 Do not include meta-commentary about the summarization process.`
 
@@ -90,7 +90,7 @@ export async function compactMessages(
   // Create the compacted message array
   const summaryMessage: Message = {
     role: "user",
-    content: `[Earlier today]\n${summary}\n[The day continues...]`,
+    content: `[Earlier this session]\n${summary}\n[The session continues...]`,
   }
 
   const compactedMessages = [summaryMessage, ...recentMessages]

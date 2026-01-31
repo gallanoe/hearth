@@ -79,7 +79,7 @@ describe("compaction", () => {
 
       // First message should be the summary
       expect(result.messages[0].role).toBe("user")
-      expect(result.messages[0].content).toContain("[Earlier today]")
+      expect(result.messages[0].content).toContain("[Earlier this session]")
       expect(result.messages[0].content).toContain("Summary:")
     })
 

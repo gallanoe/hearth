@@ -11,6 +11,7 @@ export interface WakeUpContext {
   intentions: string | null // From previous session
   reflections: string[] // Relevant past reflections
   inboxCount: number // Unread messages
+  previousSessionSummary: string | null // Summary of the previous session
 }
 
 /**
@@ -51,10 +52,17 @@ export function buildWakeUpMessage(context: WakeUpContext): string {
   parts.push("")
   parts.push(`This session's budget: ${budgetK}k tokens.`)
 
+  // Previous session summary
+  if (context.previousSessionSummary) {
+    parts.push("")
+    parts.push("Summary of last session:")
+    parts.push(context.previousSessionSummary)
+  }
+
   // Intentions from last session
   if (context.intentions) {
     parts.push("")
-    parts.push(`Last session, before sleeping, you noted: "${context.intentions}"`)
+    parts.push(`Before sleeping, you noted: "${context.intentions}"`)
   }
 
   // Relevant reflections

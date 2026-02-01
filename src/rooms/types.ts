@@ -64,4 +64,6 @@ export interface Room {
 export interface UniversalTools {
   moveTo: ExecutableTool
   checkBudget: ExecutableTool
+  readInbox: ExecutableTool
+  sendMessage: ExecutableTool
 }

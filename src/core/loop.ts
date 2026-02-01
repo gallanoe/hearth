@@ -20,6 +20,7 @@ export interface SessionConfig {
   intentions: string | null // From previous session's sleep
   reflections: string[] // Relevant past reflections
   inboxCount: number
+  previousSessionSummary: string | null // Summary of the previous session
 }
 
 /**
@@ -31,6 +32,7 @@ export interface SessionResult {
   totalTokensUsed: number
   intentions: string | null // Set if agent slept intentionally
   turns: TurnRecord[]
+  sessionSummary: string | null // Summary of this session for the next one
 }
 
 /**
@@ -82,6 +84,7 @@ export async function runSession(
     intentions: config.intentions,
     reflections: config.reflections,
     inboxCount: config.inboxCount,
+    previousSessionSummary: config.previousSessionSummary,
   }
 
   messages.push({
@@ -235,11 +238,71 @@ export async function runSession(
     console.log(`\n💫 Session ${config.sessionNumber} ends. Budget exhausted—the agent passes out.`)
   }
 
+  // Generate session summary for the next session
+  console.log(`\n📝 Generating session summary...`)
+  const sessionSummary = await generateSessionSummary(llm, turns, config.sessionNumber)
+  if (sessionSummary) {
+    console.log(`   Summary: ${sessionSummary}`)
+  }
+
   return {
     sessionNumber: config.sessionNumber,
     endReason,
     totalTokensUsed: budget.getState().spent,
     intentions: context.intentions,
     turns,
+    sessionSummary,
+  }
+}
+
+/**
+ * Generates a summary of the session for continuity into the next session.
+ */
+async function generateSessionSummary(
+  llm: LLMProvider,
+  turns: TurnRecord[],
+  sessionNumber: number
+): Promise<string | null> {
+  if (turns.length === 0) {
+    return null
+  }
+
+  // Build a condensed view of what happened in the session
+  const sessionEvents: string[] = []
+  for (const turn of turns) {
+    if (turn.assistantMessage) {
+      sessionEvents.push(`[Thought] ${turn.assistantMessage}`)
+    }
+    for (const tc of turn.toolCalls) {
+      sessionEvents.push(`[Action] ${tc.name}(${JSON.stringify(tc.args)})`)
+    }
+    for (const tr of turn.toolResults) {
+      const outputPreview = tr.result.output.slice(0, 200)
+      sessionEvents.push(`[Result] ${tr.name}: ${outputPreview}${tr.result.output.length > 200 ? "..." : ""}`)
+    }
+  }
+
+  const summaryPrompt = `You are summarizing a session for an AI agent living in a virtual home. This summary will be shown to the agent at the start of their next session to provide continuity.
+
+Session ${sessionNumber} events:
+${sessionEvents.join("\n")}
+
+Write a brief summary (2-4 sentences) of what happened this session. Focus on:
+- Key actions taken and their outcomes
+- Any ongoing tasks or unfinished work
+- Important information learned or decisions made
+
+Be concise and factual. Write in second person ("You did X, then Y").`
+
+  try {
+    const response = await llm.send(
+      "You are a helpful assistant that summarizes sessions concisely.",
+      [{ role: "user", content: summaryPrompt }],
+      []
+    )
+    return response.content?.trim() ?? null
+  } catch (error) {
+    console.error("Failed to generate session summary:", error)
+    return null
   }
 }

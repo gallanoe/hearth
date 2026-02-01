@@ -45,6 +45,7 @@ const server = Bun.serve({
                 totalTokensUsed: lastResult.totalTokensUsed,
                 turns: lastResult.turns.length,
                 intentions: lastResult.intentions,
+                sessionSummary: lastResult.sessionSummary,
               }
             : null,
         }),
@@ -56,6 +57,11 @@ const server = Bun.serve({
           return Response.json({ error: "Agent is already awake" }, { status: 400 })
         }
 
+        // Send welcome letter on first session
+        if (currentSession === 0) {
+          letterStore.sendWelcomeLetterIfFirstSession()
+        }
+
         isRunning = true
         currentSession++
 
@@ -65,6 +71,7 @@ const server = Bun.serve({
           intentions: lastResult?.intentions ?? null,
           reflections: [],
           inboxCount: letterStore.getUnreadCount(),
+          previousSessionSummary: lastResult?.sessionSummary ?? null,
         }
 
         // Fire and forget - run session asynchronously

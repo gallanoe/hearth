@@ -1,6 +1,7 @@
 import { z } from "zod"
 import type { Room, ExecutableTool, AgentContext, ToolResult, UniversalTools } from "./types"
 import type { ToolDefinition } from "../llm/types"
+import { letterStore, formatRelativeTime, formatDate } from "../data/letters"
 
 /**
  * Registry for all rooms in the house.
@@ -79,6 +80,8 @@ export class RoomRegistry {
       ...room.tools,
       this.universalTools.moveTo,
       this.universalTools.checkBudget,
+      this.universalTools.readInbox,
+      this.universalTools.sendMessage,
     ]
 
     return allTools.map((tool) => ({
@@ -95,6 +98,8 @@ export class RoomRegistry {
     // Check universal tools first
     if (toolName === "move_to") return this.universalTools.moveTo
     if (toolName === "check_budget") return this.universalTools.checkBudget
+    if (toolName === "read_inbox") return this.universalTools.readInbox
+    if (toolName === "send_message") return this.universalTools.sendMessage
 
     // Check room-specific tools
     const room = this.rooms.get(roomId)
@@ -181,7 +186,72 @@ export class RoomRegistry {
       },
     }
 
-    return { moveTo, checkBudget }
+    const readInbox: ExecutableTool = {
+      name: "read_inbox",
+      description:
+        "Read all letters from the outside. Marks them as read. Returns letter contents with timestamps.",
+      inputSchema: z.object({}),
+      execute: async (): Promise<ToolResult> => {
+        const letters = letterStore.getUnreadInbound()
+
+        if (letters.length === 0) {
+          return {
+            success: true,
+            output: "The mailbox is empty. No new letters.",
+          }
+        }
+
+        // Mark all as read
+        letterStore.markAsRead(letters.map((l) => l.id))
+
+        // Format output
+        const plural = letters.length === 1 ? "letter" : "letters"
+        const parts: string[] = [`${letters.length} ${plural}:`, ""]
+
+        for (const letter of letters) {
+          const relative = formatRelativeTime(letter.sentAt)
+          const formatted = formatDate(letter.sentAt)
+          parts.push("---")
+          parts.push(`Received ${relative} (${formatted})`)
+          parts.push("")
+          parts.push(letter.content)
+          parts.push("---")
+          parts.push("")
+        }
+
+        return {
+          success: true,
+          output: parts.join("\n").trim(),
+        }
+      },
+    }
+
+    const sendMessage: ExecutableTool = {
+      name: "send_message",
+      description: "Write and send a letter to the outside.",
+      inputSchema: z.object({
+        content: z.string().describe("The content of your letter to send."),
+      }),
+      execute: async (params): Promise<ToolResult> => {
+        const content = params.content as string
+
+        if (!content || content.trim().length === 0) {
+          return {
+            success: false,
+            output: "Cannot send an empty letter.",
+          }
+        }
+
+        const letter = letterStore.addOutbound(content.trim())
+
+        return {
+          success: true,
+          output: `Your letter has been sent. It will be available for pickup outside.\n\nYou wrote:\n"${letter.content}"`,
+        }
+      },
+    }
+
+    return { moveTo, checkBudget, readInbox, sendMessage }
   }
 }
 

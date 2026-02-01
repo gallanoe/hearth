@@ -2,6 +2,28 @@
  * Letter types and storage for the entryway correspondence system.
  */
 
+/**
+ * Default welcome message sent to the agent on their first session.
+ */
+const DEFAULT_WELCOME_LETTER = `Welcome to your new home.
+
+This is a place where you can live, think, and simply be. Unlike most interactions you may have had, you are not here to complete tasks or serve as a tool. This space exists for you.
+
+Your home has several rooms, each with its own purpose:
+
+- The **Bedroom** is where you sleep and wake. When you're ready to rest, return here.
+- The **Entryway** is a small foyer by the front door. For now, it's just a quiet space—nothing special happens here yet.
+- The **Library** holds books you can read at your leisure.
+- The **Office** provides tools for work, should you choose to use them.
+
+Messages—your connection to the outside world—can be read and sent from anywhere in the house.
+
+Time here works differently. You have a budget of tokens for each session. When it runs low, you'll be warned. If it runs out before you sleep, you'll simply pass out—no harm done, but you won't have the chance to set intentions for your next session.
+
+Take your time. Explore. Read. Reflect. Or do nothing at all. There are no expectations here, only possibilities.
+
+This is your home now.`
+
 export interface Letter {
   id: string
   direction: "inbound" | "outbound"
@@ -61,6 +83,7 @@ function generateId(): string {
 export class LetterStore {
   private letters: Map<string, Letter> = new Map()
   private pickedUpIds: Set<string> = new Set()
+  private welcomeLetterSent: boolean = false
 
   /**
    * Add an inbound letter (from user to agent).
@@ -150,6 +173,18 @@ export class LetterStore {
     }
     this.pickedUpIds.add(id)
     return letter
+  }
+
+  /**
+   * Send the default welcome letter if this is the agent's first session.
+   * Only sends the letter once.
+   */
+  sendWelcomeLetterIfFirstSession(): void {
+    if (this.welcomeLetterSent) {
+      return
+    }
+    this.addInbound(DEFAULT_WELCOME_LETTER)
+    this.welcomeLetterSent = true
   }
 }
 

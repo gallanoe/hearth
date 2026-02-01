@@ -66,4 +66,5 @@ export interface UniversalTools {
   checkBudget: ExecutableTool
   readInbox: ExecutableTool
   sendMessage: ExecutableTool
+  decorateRoom: ExecutableTool
 }

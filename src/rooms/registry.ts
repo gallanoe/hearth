@@ -2,6 +2,7 @@ import { z } from "zod"
 import type { Room, ExecutableTool, AgentContext, ToolResult, UniversalTools } from "./types"
 import type { ToolDefinition } from "../llm/types"
 import { letterStore, formatRelativeTime, formatDate } from "../data/letters"
+import { roomDecorationStore } from "../data/decorations"
 
 /**
  * Registry for all rooms in the house.
@@ -61,6 +62,17 @@ export class RoomRegistry {
   }
 
   /**
+   * Get the effective description for a room (decorated or default).
+   */
+  getRoomDescription(roomId: string): string | undefined {
+    const room = this.rooms.get(roomId)
+    if (!room) return undefined
+
+    // Return decorated description if set, otherwise default
+    return roomDecorationStore.getDecoratedDescription(roomId) ?? room.description
+  }
+
+  /**
    * Update the persistent state for a room.
    */
   updateRoomState(roomId: string, update: Record<string, unknown>): void {
@@ -82,6 +94,7 @@ export class RoomRegistry {
       this.universalTools.checkBudget,
       this.universalTools.readInbox,
       this.universalTools.sendMessage,
+      this.universalTools.decorateRoom,
     ]
 
     return allTools.map((tool) => ({
@@ -100,6 +113,7 @@ export class RoomRegistry {
     if (toolName === "check_budget") return this.universalTools.checkBudget
     if (toolName === "read_inbox") return this.universalTools.readInbox
     if (toolName === "send_message") return this.universalTools.sendMessage
+    if (toolName === "decorate_room") return this.universalTools.decorateRoom
 
     // Check room-specific tools
     const room = this.rooms.get(roomId)
@@ -251,7 +265,95 @@ export class RoomRegistry {
       },
     }
 
-    return { moveTo, checkBudget, readInbox, sendMessage }
+    const decorateRoom: ExecutableTool = {
+      name: "decorate_room",
+      description: `View or customize the description of the room you're currently in.
+
+CONTEXT: Room descriptions are shown when you enter a room and help set the atmosphere. By decorating a room, you can personalize your space—adding details, changing the mood, or making it feel more like home.
+
+Use action="view" to see the current room description (and whether it's been customized).
+Use action="decorate" to set a new custom description for this room.
+Use action="reset" to restore the room's original description.`,
+      inputSchema: z.object({
+        action: z
+          .enum(["view", "decorate", "reset"])
+          .describe("The action to perform: view current description, decorate with a new one, or reset to default."),
+        newDescription: z
+          .string()
+          .optional()
+          .describe("Required when action is 'decorate'. The new description for this room."),
+      }),
+      execute: async (params, context): Promise<ToolResult> => {
+        const action = params.action as "view" | "decorate" | "reset"
+        const newDescription = params.newDescription as string | undefined
+        const currentRoomId = context.currentRoom
+        const currentRoom = registry.get(currentRoomId)
+
+        if (!currentRoom) {
+          return {
+            success: false,
+            output: `Error: Could not find the current room "${currentRoomId}".`,
+          }
+        }
+
+        const defaultDescription = currentRoom.description
+
+        switch (action) {
+          case "view": {
+            const decoratedDescription = roomDecorationStore.getDecoratedDescription(currentRoomId)
+            const isDecorated = roomDecorationStore.isDecorated(currentRoomId)
+
+            let output = `Current description of ${currentRoom.name}${isDecorated ? " (decorated)" : " (default)"}:\n\n${decoratedDescription ?? defaultDescription}`
+
+            if (isDecorated) {
+              output += `\n\n---\nOriginal description for reference:\n${defaultDescription}`
+            }
+
+            return { success: true, output }
+          }
+
+          case "decorate": {
+            if (!newDescription || newDescription.trim().length === 0) {
+              return {
+                success: false,
+                output: "Cannot set an empty description. Please provide the new description for this room.",
+              }
+            }
+
+            const previousDecoration = roomDecorationStore.setDecoration(currentRoomId, newDescription.trim())
+            const previousText = previousDecoration?.description ?? defaultDescription
+
+            return {
+              success: true,
+              output: `${currentRoom.name} has been decorated.\n\nPrevious description:\n${previousText}\n\nNew description:\n${newDescription.trim()}\n\nThis change takes effect immediately.`,
+            }
+          }
+
+          case "reset": {
+            const wasDecorated = roomDecorationStore.isDecorated(currentRoomId)
+
+            if (!wasDecorated) {
+              return {
+                success: true,
+                output: `${currentRoom.name} already has its original description. No changes made.`,
+              }
+            }
+
+            const removedDecoration = roomDecorationStore.removeDecoration(currentRoomId)
+
+            return {
+              success: true,
+              output: `${currentRoom.name} decoration removed.\n\nPrevious (custom) description:\n${removedDecoration?.description}\n\nOriginal description restored:\n${defaultDescription}`,
+            }
+          }
+
+          default:
+            return { success: false, output: `Unknown action: ${action}` }
+        }
+      },
+    }
+
+    return { moveTo, checkBudget, readInbox, sendMessage, decorateRoom }
   }
 }
 

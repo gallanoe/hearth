@@ -1,6 +1,7 @@
 import type { BudgetState } from "./budget"
 import type { Room } from "../rooms/types"
 import { personaStore } from "../data/persona"
+import { roomDecorationStore } from "../data/decorations"
 
 /**
  * Data available at wake-up.
@@ -45,7 +46,9 @@ export function buildWakeUpMessage(context: WakeUpContext): string {
   // Session narration
   parts.push(`Session ${context.session}.`)
   parts.push("")
-  parts.push(context.currentRoom.description)
+  // Use decorated description if available, otherwise default
+  const roomDescription = roomDecorationStore.getDecoratedDescription(context.currentRoom.id) ?? context.currentRoom.description
+  parts.push(roomDescription)
 
   // Budget notice
   const budgetK = Math.round(context.budget.total / 1000)
@@ -92,7 +95,9 @@ export function buildRoomEntryMessage(room: Room, extraContext?: string): string
 
   parts.push(`You are now in the ${room.name}.`)
   parts.push("")
-  parts.push(room.description)
+  // Use decorated description if available, otherwise default
+  const roomDescription = roomDecorationStore.getDecoratedDescription(room.id) ?? room.description
+  parts.push(roomDescription)
 
   if (extraContext) {
     parts.push("")
@@ -107,6 +112,7 @@ export function buildRoomEntryMessage(room: Room, extraContext?: string): string
   }
   parts.push("- move_to: Move to another room in the house.")
   parts.push("- check_budget: Check how much of this session's token budget remains.")
+  parts.push("- decorate_room: Customize this room's description.")
 
   return parts.join("\n")
 }

@@ -66,19 +66,19 @@ export function buildWakeUpMessage(context: WakeUpContext): string {
   }
 
   // Relevant reflections
-  if (context.reflections.length > 0) {
-    parts.push("")
-    parts.push("From previous reflections:")
-    for (const reflection of context.reflections) {
-      parts.push(`- ${reflection}`)
-    }
-  }
+  // if (context.reflections.length > 0) {
+  //   parts.push("")
+  //   parts.push("From previous reflections:")
+  //   for (const reflection of context.reflections) {
+  //     parts.push(`- ${reflection}`)
+  //   }
+  // }
 
   // Inbox status
   if (context.inboxCount > 0) {
     parts.push("")
     const plural = context.inboxCount === 1 ? "letter" : "letters"
-    parts.push(`${context.inboxCount} unread ${plural} in the entryway.`)
+    parts.push(`${context.inboxCount} unread ${plural} in your inbox.`)
   }
 
   return parts.join("\n")

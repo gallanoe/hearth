@@ -2,13 +2,21 @@
  * Shared utilities for office tools.
  */
 import { resolve, join } from "node:path"
-import { stat } from "node:fs/promises"
+import { stat, mkdir } from "node:fs/promises"
 
 /**
  * The agent's workspace root directory.
  * All file operations are scoped to this directory.
  */
 export const WORKSPACE_ROOT = process.env.AGENT_WORKSPACE || "/home/agent"
+
+/**
+ * Ensures the workspace directory exists.
+ * Creates it if necessary.
+ */
+export async function ensureWorkspaceExists(): Promise<void> {
+  await mkdir(WORKSPACE_ROOT, { recursive: true })
+}
 
 /**
  * Output limits for different tools.

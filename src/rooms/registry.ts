@@ -237,11 +237,11 @@ export class RoomRegistry {
           }
         }
 
-        const letter = letterStore.addOutbound(content.trim())
+        letterStore.addOutbound(content.trim())
 
         return {
           success: true,
-          output: `Your letter has been sent. It will be available for pickup outside.\n\nYou wrote:\n"${letter.content}"`,
+          output: `Your letter has been sent.`,
         }
       },
     }
@@ -286,10 +286,6 @@ Use action="reset" to restore the room's original description.`,
 
             let output = `Current description of ${currentRoom.name}${isDecorated ? " (decorated)" : " (default)"}:\n\n${decoratedDescription ?? defaultDescription}`
 
-            if (isDecorated) {
-              output += `\n\n---\nOriginal description for reference:\n${defaultDescription}`
-            }
-
             return { success: true, output }
           }
 
@@ -306,7 +302,7 @@ Use action="reset" to restore the room's original description.`,
 
             return {
               success: true,
-              output: `${currentRoom.name} has been decorated.\n\nPrevious description:\n${previousText}\n\nNew description:\n${newDescription.trim()}\n\nThis change takes effect immediately.`,
+              output: `${currentRoom.name} has been decorated.`,
             }
           }
 

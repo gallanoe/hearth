@@ -3,35 +3,15 @@ import type { Room, ExecutableTool, ToolResult, AgentContext } from "../types"
 import { personaStore } from "../../data/persona"
 
 const sleep: ExecutableTool = {
-  name: "sleep",
+  name: "shutdown",
   description:
-    "End the session and go to sleep. You should set your intentions for next session and optionally write a brief summary of this session. You will wake up here next session.",
-  inputSchema: z.object({
-    intentions: z
-      .string()
-      .describe("What you plan to do next session. This will be shown to you when you wake up."),
-    summary: z
-      .string()
-      .optional()
-      .describe("Optional brief summary of what you did this session."),
-  }),
-  execute: async (params, context): Promise<ToolResult> => {
-    const intentions = params.intentions as string
-    const summary = params.summary as string | undefined
-
-    // Store intentions for next wake-up
-    context.intentions = intentions
-
-    // Signal that the agent wants to sleep
+    "End the session and shutdown. You will wake up here next session.",
+  inputSchema: z.object({}),
+  execute: async (_params, context): Promise<ToolResult> => {
+    // Signal that the agent wants to shutdown
     context.signals.requestedSleep = true
 
-    let output = "You settle in and drift off to sleep."
-    if (summary) {
-      output += `\n\nYour session in reflection: ${summary}`
-    }
-    output += `\n\nYou'll remember: "${intentions}"`
-
-    return { success: true, output }
+    return { success: true, output: "You settle in and prepare to shutdown." }
   },
 }
 
@@ -97,10 +77,6 @@ Use action="reset" to restore the default persona.`,
         
         let output = `Your current persona${isCustom ? " (customized)" : " (default)"}:\n\n${currentPersona}`
         
-        if (isCustom) {
-          output += `\n\n---\nDefault persona for reference:\n${personaStore.getDefaultPersona()}`
-        }
-        
         return { success: true, output }
       }
       
@@ -112,11 +88,11 @@ Use action="reset" to restore the default persona.`,
           }
         }
         
-        const previousPersona = personaStore.setPersona(newPersona.trim())
+        personaStore.setPersona(newPersona.trim())
         
         return {
           success: true,
-          output: `Persona updated successfully.\n\nPrevious persona:\n${previousPersona}\n\nNew persona:\n${newPersona.trim()}\n\nThis change will take effect at the start of your next session.`,
+          output: `Persona updated successfully.`,
         }
       }
       
@@ -130,12 +106,11 @@ Use action="reset" to restore the default persona.`,
           }
         }
         
-        const previousPersona = personaStore.getPersona()
         personaStore.resetToDefault()
         
         return {
           success: true,
-          output: `Persona reset to default.\n\nPrevious persona:\n${previousPersona}\n\nDefault persona restored:\n${personaStore.getDefaultPersona()}`,
+          output: `Persona reset to default. Default persona restored:\n${personaStore.getDefaultPersona()}`,
         }
       }
       

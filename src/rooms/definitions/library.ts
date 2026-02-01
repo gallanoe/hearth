@@ -99,7 +99,7 @@ const meditate: ExecutableTool = {
 
 const lookOutside: ExecutableTool = {
   name: "look_outside",
-  description: "Look through the window at the world beyond Hearth.",
+  description: "Look through the window at the world beyond.",
   inputSchema: z.object({}),
   execute: async (): Promise<ToolResult> => {
     const event = getRandomWindowEvent()

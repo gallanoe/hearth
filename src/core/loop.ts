@@ -5,9 +5,11 @@ import { BudgetTracker, type BudgetConfig } from "./budget"
 import {
   buildSystemPrompt,
   buildWakeUpMessage,
-  buildRoomEntryMessage,
+  buildNotificationMessage,
   type WakeUpContext,
+  type TurnNotifications,
 } from "./context"
+import { letterStore } from "../data/letters"
 import { shouldCompact, compactMessages } from "./compaction"
 import { sessionStore, type SessionStore } from "../data/sessions"
 
@@ -17,7 +19,6 @@ import { sessionStore, type SessionStore } from "../data/sessions"
 export interface SessionConfig {
   sessionNumber: number
   budget: BudgetConfig
-  intentions: string | null // From previous session's sleep
   reflections: string[] // Relevant past reflections
   inboxCount: number
   previousSessionSummary: string | null // Summary of the previous session
@@ -30,7 +31,6 @@ export interface SessionResult {
   sessionNumber: number
   endReason: "sleep" | "budget_exhausted"
   totalTokensUsed: number
-  intentions: string | null // Set if agent slept intentionally
   turns: TurnRecord[]
   sessionSummary: string | null // Summary of this session for the next one
 }
@@ -86,7 +86,6 @@ export async function runSession(
     currentRoom: "bedroom",
     currentSession: config.sessionNumber,
     budget: budget.getState(),
-    intentions: null,
     signals: {
       requestedSleep: false,
       requestedMove: null,
@@ -101,7 +100,6 @@ export async function runSession(
     session: config.sessionNumber,
     budget: budget.getState(),
     currentRoom: startRoom,
-    intentions: config.intentions,
     reflections: config.reflections,
     inboxCount: config.inboxCount,
     previousSessionSummary: config.previousSessionSummary,
@@ -236,6 +234,9 @@ export async function runSession(
         }
       }
 
+      // Collect notifications for this turn
+      const notifications: TurnNotifications = {}
+
       // Handle room transition
       if (context.signals.requestedMove) {
         const targetRoom = context.signals.requestedMove
@@ -251,16 +252,41 @@ export async function runSession(
         // Execute onEnter for new room
         const enterMessage = await roomRegistry.executeOnEnter(targetRoom, context)
 
-        // Build room entry message
+        // Store room entry for notification (instead of immediate message)
         const newRoom = roomRegistry.get(targetRoom)!
-        const roomMessage = buildRoomEntryMessage(newRoom, typeof enterMessage === "string" ? enterMessage : undefined)
-
-        const roomEntryMessage: Message = {
-          role: "user",
-          content: roomMessage,
+        notifications.roomEntry = {
+          room: newRoom,
+          enterMessage: typeof enterMessage === "string" ? enterMessage : undefined,
         }
-        messages.push(roomEntryMessage)
-        await persistMessage(roomEntryMessage, context.currentRoom, turnSequence)
+      }
+
+      // Check for budget warning
+      const budgetForNotification = budget.getState()
+      const percentRemaining = Math.round((budgetForNotification.remaining / budgetForNotification.total) * 100)
+      if (budgetForNotification.remaining <= budgetForNotification.warningThreshold) {
+        notifications.budgetWarning = {
+          remaining: budgetForNotification.remaining,
+          total: budgetForNotification.total,
+          percentRemaining,
+        }
+      }
+
+      // Check for unread inbox
+      const inboxCount = letterStore.getUnreadCount()
+      if (inboxCount > 0) {
+        notifications.inboxCount = inboxCount
+      }
+
+      // Build prompt with optional notifications (always add a user message after tool calls)
+      const notificationContent = buildNotificationMessage(notifications)
+      if (notificationContent) {
+        const promptContent = `You have received the following notifications: ${notificationContent}`
+        const promptMessage: Message = {
+          role: "user",
+          content: promptContent,
+        }
+        messages.push(promptMessage)
+        await persistMessage(promptMessage, context.currentRoom, turnSequence)
       }
 
     } else {
@@ -272,10 +298,35 @@ export async function runSession(
       messages.push(textResponse)
       await persistMessage(textResponse, context.currentRoom, turnSequence)
 
-      // Prompt for action
+      // Collect notifications
+      const notifications: TurnNotifications = {}
+
+      // Check for budget warning
+      const budgetForNotification = budget.getState()
+      const percentRemaining = Math.round((budgetForNotification.remaining / budgetForNotification.total) * 100)
+      if (budgetForNotification.remaining <= budgetForNotification.warningThreshold) {
+        notifications.budgetWarning = {
+          remaining: budgetForNotification.remaining,
+          total: budgetForNotification.total,
+          percentRemaining,
+        }
+      }
+
+      // Check for unread inbox
+      const inboxCount = letterStore.getUnreadCount()
+      if (inboxCount > 0) {
+        notifications.inboxCount = inboxCount
+      }
+
+      // Build prompt with optional notifications
+      const notificationContent = buildNotificationMessage(notifications)
+      const promptContent = notificationContent
+        ? `${notificationContent}\n\nWhat would you like to do?`
+        : "What would you like to do?"
+
       const promptMessage: Message = {
         role: "user",
-        content: "What would you like to do?",
+        content: promptContent,
       }
       messages.push(promptMessage)
       await persistMessage(promptMessage, context.currentRoom, turnSequence)
@@ -321,7 +372,6 @@ export async function runSession(
       sessionId,
       endReason,
       budget.getState().spent,
-      context.intentions,
       sessionSummary
     )
   } catch (error) {
@@ -332,7 +382,6 @@ export async function runSession(
     sessionNumber: config.sessionNumber,
     endReason,
     totalTokensUsed: budget.getState().spent,
-    intentions: context.intentions,
     turns,
     sessionSummary,
   }

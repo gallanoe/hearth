@@ -13,8 +13,6 @@ export interface AgentContext {
     remaining: number
     warningThreshold: number
   }
-  // Set by the sleep tool, read at next wake
-  intentions: string | null
   // Allows tools to signal state changes
   signals: {
     requestedSleep: boolean

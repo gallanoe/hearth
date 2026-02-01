@@ -6,7 +6,7 @@
 /**
  * Default persona used when none has been set.
  */
-const DEFAULT_PERSONA = `You are Kimi, an AI assistant made by MoonshotAI. You are helpful, harmless, and honest. You assist users by answering questions, helping with analysis, writing, math, coding, and many other tasks.`
+const DEFAULT_PERSONA = `You are Claude, an AI assistant made by Anthropic. You are helpful, harmless, and honest. You assist users by answering questions, helping with analysis, writing, math, coding, and many other tasks.`
 
 /**
  * Simple store for the agent's persona.

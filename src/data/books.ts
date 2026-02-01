@@ -20,9 +20,9 @@ export interface PaginatedContent {
 }
 
 /**
- * Characters per page (~1000 tokens).
+ * Characters per page (~4096 tokens).
  */
-export const PAGE_SIZE = 4000
+export const PAGE_SIZE = 16384
 
 /**
  * Paginates book content with ellipses indicators.

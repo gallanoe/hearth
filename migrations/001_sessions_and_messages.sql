@@ -5,7 +5,6 @@ CREATE TABLE sessions (
     ended_at          TIMESTAMPTZ,
     end_reason        TEXT CHECK (end_reason IN ('sleep', 'budget_exhausted')),
     total_tokens_used INTEGER,
-    intentions        TEXT,
     session_summary   TEXT,
     metadata          JSONB DEFAULT '{}'
 );

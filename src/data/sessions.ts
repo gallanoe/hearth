@@ -12,7 +12,6 @@ export interface SessionInfo {
   endedAt: Date | null
   endReason: "sleep" | "budget_exhausted" | null
   totalTokensUsed: number | null
-  intentions: string | null
   sessionSummary: string | null
 }
 
@@ -74,7 +73,6 @@ export class SessionStore {
     sessionId: number,
     endReason: "sleep" | "budget_exhausted",
     totalTokensUsed: number,
-    intentions: string | null,
     sessionSummary: string | null
   ): Promise<void> {
     if (!sql) return
@@ -86,7 +84,6 @@ export class SessionStore {
           ended_at = now(),
           end_reason = ${endReason},
           total_tokens_used = ${totalTokensUsed},
-          intentions = ${intentions},
           session_summary = ${sessionSummary}
         WHERE session_id = ${sessionId}
       `
@@ -389,28 +386,6 @@ export class SessionStore {
   }
 
   /**
-   * Get intentions from the most recent session that ended via sleep.
-   */
-  async getPreviousIntentions(): Promise<string | null> {
-    if (!sql) return null
-
-    try {
-      const [row] = await sql`
-        SELECT intentions
-        FROM sessions
-        WHERE ended_at IS NOT NULL
-          AND end_reason = 'sleep'
-        ORDER BY ended_at DESC
-        LIMIT 1
-      `
-      return row?.intentions as string | null ?? null
-    } catch (error) {
-      console.error("SessionStore.getPreviousIntentions failed:", error)
-      return null
-    }
-  }
-
-  /**
    * Get session info by ID.
    */
   async getSessionInfo(sessionId: number): Promise<SessionInfo | null> {
@@ -424,7 +399,6 @@ export class SessionStore {
           ended_at,
           end_reason,
           total_tokens_used,
-          intentions,
           session_summary
         FROM sessions
         WHERE session_id = ${sessionId}
@@ -438,7 +412,6 @@ export class SessionStore {
         endedAt: row.ended_at ? new Date(row.ended_at as string) : null,
         endReason: row.end_reason as SessionInfo["endReason"],
         totalTokensUsed: row.total_tokens_used as number | null,
-        intentions: row.intentions as string | null,
         sessionSummary: row.session_summary as string | null,
       }
     } catch (error) {
@@ -479,7 +452,6 @@ export class SessionStore {
           ended_at,
           end_reason,
           total_tokens_used,
-          intentions,
           session_summary
         FROM sessions
         ORDER BY session_id DESC
@@ -491,7 +463,6 @@ export class SessionStore {
         endedAt: row.ended_at ? new Date(row.ended_at as string) : null,
         endReason: row.end_reason as SessionInfo["endReason"],
         totalTokensUsed: row.total_tokens_used as number | null,
-        intentions: row.intentions as string | null,
         sessionSummary: row.session_summary as string | null,
       }))
     } catch (error) {

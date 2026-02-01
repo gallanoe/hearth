@@ -11,7 +11,6 @@ export interface WakeUpContext {
   session: number
   budget: BudgetState
   currentRoom: Room
-  intentions: string | null // From previous session
   reflections: string[] // Relevant past reflections
   inboxCount: number // Unread messages
   previousSessionSummary: string | null // Summary of the previous session
@@ -81,12 +80,6 @@ export function buildWakeUpMessage(context: WakeUpContext): string {
     parts.push(context.previousSessionSummary)
   }
 
-  // Intentions from last session
-  if (context.intentions) {
-    parts.push("")
-    parts.push(`Before sleeping, you noted: "${context.intentions}"`)
-  }
-
   // Relevant reflections
   // if (context.reflections.length > 0) {
   //   parts.push("")
@@ -133,4 +126,55 @@ export function buildRoomEntryMessage(room: Room, extraContext?: string): string
   parts.push("- decorate_room: Customize this room's description.")
 
   return parts.join("\n")
+}
+
+/**
+ * Notifications that can be shown to the agent during a turn.
+ */
+export interface TurnNotifications {
+  /** Room the agent just entered (if they moved this turn) */
+  roomEntry?: {
+    room: Room
+    enterMessage?: string
+  }
+  /** Budget warning when remaining budget is low */
+  budgetWarning?: {
+    remaining: number
+    total: number
+    percentRemaining: number
+  }
+  /** Count of unread letters in inbox */
+  inboxCount?: number
+}
+
+/**
+ * Builds a combined notification message from accumulated notifications.
+ * Returns null if there are no notifications to show.
+ */
+export function buildNotificationMessage(notifications: TurnNotifications): string | null {
+  const parts: string[] = []
+
+  // Room entry takes priority - it's the most important context
+  if (notifications.roomEntry) {
+    const { room, enterMessage } = notifications.roomEntry
+    parts.push(buildRoomEntryMessage(room, enterMessage))
+  }
+
+  // Budget warning
+  if (notifications.budgetWarning && notifications.budgetWarning.percentRemaining <= 20) {
+    const { remaining, percentRemaining } = notifications.budgetWarning
+    parts.push(`⚠️ Budget warning: ${percentRemaining}% remaining (${remaining.toLocaleString()} tokens). Consider wrapping up soon.`)
+  }
+
+  // Inbox notification
+  if (notifications.inboxCount && notifications.inboxCount > 0) {
+    const plural = notifications.inboxCount === 1 ? "letter" : "letters"
+    parts.push(`📬 You have ${notifications.inboxCount} unread ${plural} in your inbox.`)
+  }
+
+  if (parts.length === 0) {
+    return null
+  }
+
+  return parts.join("\n\n")
 }

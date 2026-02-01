@@ -33,8 +33,8 @@ let lastResult: SessionResult | null = null // Fallback for when DB is unavailab
 
 // Default budget config
 const defaultBudget = {
-  totalTokens: 1_000_000,
-  warningThreshold: 100_000,
+  totalTokens: 100_000,
+  warningThreshold: 50_000,
 }
 
 const server = Bun.serve({
@@ -56,7 +56,6 @@ const server = Bun.serve({
             ? {
                 endReason: latestSession.endReason,
                 totalTokensUsed: latestSession.totalTokensUsed,
-                intentions: latestSession.intentions,
                 sessionSummary: latestSession.sessionSummary,
               }
             : lastResult
@@ -64,7 +63,6 @@ const server = Bun.serve({
                   endReason: lastResult.endReason,
                   totalTokensUsed: lastResult.totalTokensUsed,
                   turns: lastResult.turns.length,
-                  intentions: lastResult.intentions,
                   sessionSummary: lastResult.sessionSummary,
                 }
               : null,
@@ -89,13 +87,11 @@ const server = Bun.serve({
         isRunning = true
 
         // Get previous session data from database
-        const previousIntentions = await sessionStore.getPreviousIntentions()
         const previousSessionSummary = await sessionStore.getPreviousSessionSummary()
 
         const sessionConfig: SessionConfig = {
           sessionNumber: nextSessionNumber,
           budget: defaultBudget,
-          intentions: previousIntentions ?? lastResult?.intentions ?? null,
           reflections: [],
           inboxCount: letterStore.getUnreadCount(),
           previousSessionSummary: previousSessionSummary ?? lastResult?.sessionSummary ?? null,
@@ -180,7 +176,6 @@ const server = Bun.serve({
             endedAt: s.endedAt?.toISOString() ?? null,
             endReason: s.endReason,
             totalTokensUsed: s.totalTokensUsed,
-            intentions: s.intentions,
             sessionSummary: s.sessionSummary,
           })),
         })
@@ -207,7 +202,6 @@ const server = Bun.serve({
           endedAt: sessionInfo.endedAt?.toISOString() ?? null,
           endReason: sessionInfo.endReason,
           totalTokensUsed: sessionInfo.totalTokensUsed,
-          intentions: sessionInfo.intentions,
           sessionSummary: sessionInfo.sessionSummary,
           messages: transcript.map((m) => ({
             id: m.messageId,

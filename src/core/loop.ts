@@ -203,6 +203,7 @@ export async function runSession(
           content: roomMessage,
         })
       }
+
     } else {
       // No tool calls, just a text response
       messages.push({
@@ -216,6 +217,14 @@ export async function runSession(
         content: "What would you like to do?",
       })
     }
+
+    // Log token usage, context window size, and budget state
+    const budgetState = budget.getState()
+    const budgetPercent = Math.round((budgetState.remaining / budgetState.total) * 100)
+    console.log(`\n📊 Turn ${turnSequence}`)
+    console.log(`   Usage: ${turn.inputTokens.toLocaleString()} input tokens | ${turn.outputTokens.toLocaleString()} output tokens`)
+    console.log(`   Context: ${messages.length} messages, ~${messages.reduce((acc, msg) => acc + (msg.content?.length ?? 0) / 4, 0)} tokens`)
+    console.log(`   Budget: ${budgetState.remaining.toLocaleString()} tokens / ${budgetState.total.toLocaleString()} tokens (${budgetPercent}%)`)
 
     turns.push(turn)
   }

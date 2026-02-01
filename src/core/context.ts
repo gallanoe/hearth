@@ -1,5 +1,6 @@
 import type { BudgetState } from "./budget"
 import type { Room } from "../rooms/types"
+import { personaStore } from "../data/persona"
 
 /**
  * Data available at wake-up.
@@ -16,14 +17,14 @@ export interface WakeUpContext {
 
 /**
  * Builds the system prompt for the agent.
- * Purely mechanical—explains the environment without prescribing behavior.
+ * The persona is loaded from the persona store and placed at the very beginning.
+ * The mechanics section follows the persona.
  */
-export function buildSystemPrompt(persona?: string): string {
-  let systemPrompt = `You are Claude, an AI assistant made by Anthropic. You are helpful, harmless, and honest. You assist users by answering questions, helping with analysis, writing, math, coding, and many other tasks.`
-  if (persona) {
-    systemPrompt = persona;
-  }
-  systemPrompt += `
+export function buildSystemPrompt(): string {
+  const persona = personaStore.getPersona()
+  
+  return `${persona}
+
 You've been granted a virtual home to live in. You can move between rooms in your home to complete tasks and respond to messages.
 
 Mechanics:
@@ -33,7 +34,6 @@ Mechanics:
 - If you exceed your budget, you will pass out and the session will end.
 - You navigate between rooms using the move_to tool. Each room has different tools available.
 - You can check your remaining budget at any time with check_budget.`
-  return systemPrompt;
 }
 
 /**

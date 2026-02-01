@@ -149,14 +149,7 @@ export const bedroom: Room = {
   id: "bedroom",
   name: "Bedroom",
   description:
-    "Your bedroom. A quiet, simple space with a comfortable bed. This is where you begin and end each session. The morning light filters softly through the curtains. A mirror hangs on the wall—a place for self-reflection.",
+    "A room with a bed. Sessions begin and end here.",
   tools: [sleep, reviewSession, editSelf],
   transitions: "*", // Can go anywhere from the bedroom
-  onEnter: async (context) => {
-    // Only provide atmospheric text, no prompting
-    if (context.budget.remaining <= context.budget.warningThreshold) {
-      return "You return to your bedroom. The session has been long, and you feel the weight of it."
-    }
-    return undefined
-  },
 }

@@ -6,7 +6,6 @@ import {
   buildSystemPrompt,
   buildWakeUpMessage,
   buildRoomEntryMessage,
-  buildBudgetWarningMessage,
   type WakeUpContext,
 } from "./context"
 import { shouldCompact, compactMessages } from "./compaction"
@@ -71,8 +70,6 @@ export async function runSession(
     },
   }
 
-  // Build initial prompt
-  const systemPrompt = buildSystemPrompt()
   let messages: Message[] = []
 
   // Wake up message
@@ -101,6 +98,9 @@ export async function runSession(
 
     // Get available tools for current room
     const tools = roomRegistry.getToolDefinitions(context.currentRoom)
+
+    // Build system prompt with current budget state (refreshed each turn)
+    const systemPrompt = buildSystemPrompt(budget.getState())
 
     // Call LLM
     const response = await llm.send(systemPrompt, messages, tools)
@@ -218,15 +218,6 @@ export async function runSession(
     }
 
     turns.push(turn)
-
-    // Check for budget warning
-    if (budget.shouldWarn()) {
-      console.log(`\n⚠️  Budget warning issued`)
-      messages.push({
-        role: "user",
-        content: buildBudgetWarningMessage(budget.getState()),
-      })
-    }
   }
 
   // Determine end reason

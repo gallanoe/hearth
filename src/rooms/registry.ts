@@ -1,5 +1,6 @@
 import { z } from "zod"
 import type { Room, ExecutableTool, AgentContext, ToolResult, UniversalTools } from "./types"
+import { resolveDescription } from "./types"
 import type { ToolDefinition } from "../llm/types"
 import { letterStore, formatRelativeTime, formatDate } from "../data/letters"
 import { roomDecorationStore } from "../data/decorations"
@@ -68,8 +69,8 @@ export class RoomRegistry {
     const room = this.rooms.get(roomId)
     if (!room) return undefined
 
-    // Return decorated description if set, otherwise default
-    return roomDecorationStore.getDecoratedDescription(roomId) ?? room.description
+    // Return decorated description if set, otherwise resolve the default
+    return roomDecorationStore.getDecoratedDescription(roomId) ?? resolveDescription(room.description)
   }
 
   /**
@@ -91,7 +92,6 @@ export class RoomRegistry {
     const allTools = [
       ...room.tools,
       this.universalTools.moveTo,
-      this.universalTools.checkBudget,
       this.universalTools.readInbox,
       this.universalTools.sendMessage,
       this.universalTools.decorateRoom,
@@ -110,7 +110,6 @@ export class RoomRegistry {
   getExecutableTool(roomId: string, toolName: string): ExecutableTool | undefined {
     // Check universal tools first
     if (toolName === "move_to") return this.universalTools.moveTo
-    if (toolName === "check_budget") return this.universalTools.checkBudget
     if (toolName === "read_inbox") return this.universalTools.readInbox
     if (toolName === "send_message") return this.universalTools.sendMessage
     if (toolName === "decorate_room") return this.universalTools.decorateRoom
@@ -179,24 +178,6 @@ export class RoomRegistry {
           success: true,
           output: `Moving to ${targetRoomDef?.name ?? targetRoom}...`,
         }
-      },
-    }
-
-    const checkBudget: ExecutableTool = {
-      name: "check_budget",
-      description: "Check how much of today's token budget remains.",
-      inputSchema: z.object({}),
-      execute: async (_params, context): Promise<ToolResult> => {
-        const { total, spent, remaining, warningThreshold } = context.budget
-        const percentRemaining = Math.round((remaining / total) * 100)
-        const isLow = remaining <= warningThreshold
-
-        let output = `Budget status: ${remaining.toLocaleString()} tokens remaining (${percentRemaining}% of daily budget).`
-        if (isLow) {
-          output += ` Warning: Budget is low. Consider wrapping up and heading to bed.`
-        }
-
-        return { success: true, output }
       },
     }
 
@@ -296,7 +277,7 @@ Use action="reset" to restore the room's original description.`,
           }
         }
 
-        const defaultDescription = currentRoom.description
+        const defaultDescription = resolveDescription(currentRoom.description)
 
         switch (action) {
           case "view": {
@@ -353,7 +334,7 @@ Use action="reset" to restore the room's original description.`,
       },
     }
 
-    return { moveTo, checkBudget, readInbox, sendMessage, decorateRoom }
+    return { moveTo, readInbox, sendMessage, decorateRoom }
   }
 }
 

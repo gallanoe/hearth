@@ -1,5 +1,6 @@
 import type { BudgetState } from "./budget"
 import type { Room } from "../rooms/types"
+import { resolveDescription } from "../rooms/types"
 import { personaStore } from "../data/persona"
 import { roomDecorationStore } from "../data/decorations"
 
@@ -17,11 +18,28 @@ export interface WakeUpContext {
 }
 
 /**
+ * Formats the budget display for the system prompt.
+ * Includes a warning marker when budget is low.
+ */
+function formatBudgetDisplay(budget: BudgetState): string {
+  const remaining = budget.remaining.toLocaleString()
+  const total = budget.total.toLocaleString()
+  const percent = Math.round((budget.remaining / budget.total) * 100)
+  const isLow = budget.remaining <= budget.warningThreshold
+  
+  if (isLow) {
+    return `⚠️ BUDGET LOW: ${remaining} / ${total} tokens (${percent}%) — Consider wrapping up and heading to bed.`
+  }
+  return `Budget: ${remaining} / ${total} tokens (${percent}%)`
+}
+
+/**
  * Builds the system prompt for the agent.
  * The persona is loaded from the persona store and placed at the very beginning.
  * The mechanics section follows the persona.
+ * Budget state is displayed and updated each turn.
  */
-export function buildSystemPrompt(): string {
+export function buildSystemPrompt(budget: BudgetState): string {
   const persona = personaStore.getPersona()
   
   return `${persona}
@@ -34,7 +52,8 @@ Mechanics:
 - To end a session intentionally, return to your bedroom and use the sleep tool.
 - If you exceed your budget, you will pass out and the session will end.
 - You navigate between rooms using the move_to tool. Each room has different tools available.
-- You can check your remaining budget at any time with check_budget.`
+
+${formatBudgetDisplay(budget)}`
 }
 
 /**
@@ -46,8 +65,8 @@ export function buildWakeUpMessage(context: WakeUpContext): string {
   // Session narration
   parts.push(`Session ${context.session}.`)
   parts.push("")
-  // Use decorated description if available, otherwise default
-  const roomDescription = roomDecorationStore.getDecoratedDescription(context.currentRoom.id) ?? context.currentRoom.description
+  // Use decorated description if available, otherwise resolve default
+  const roomDescription = roomDecorationStore.getDecoratedDescription(context.currentRoom.id) ?? resolveDescription(context.currentRoom.description)
   parts.push(roomDescription)
 
   // Budget notice
@@ -95,8 +114,8 @@ export function buildRoomEntryMessage(room: Room, extraContext?: string): string
 
   parts.push(`You are now in the ${room.name}.`)
   parts.push("")
-  // Use decorated description if available, otherwise default
-  const roomDescription = roomDecorationStore.getDecoratedDescription(room.id) ?? room.description
+  // Use decorated description if available, otherwise resolve default
+  const roomDescription = roomDecorationStore.getDecoratedDescription(room.id) ?? resolveDescription(room.description)
   parts.push(roomDescription)
 
   if (extraContext) {
@@ -111,18 +130,7 @@ export function buildRoomEntryMessage(room: Room, extraContext?: string): string
     parts.push(`- ${tool.name}: ${tool.description}`)
   }
   parts.push("- move_to: Move to another room in the house.")
-  parts.push("- check_budget: Check how much of this session's token budget remains.")
   parts.push("- decorate_room: Customize this room's description.")
 
   return parts.join("\n")
-}
-
-/**
- * Builds the budget warning message.
- */
-export function buildBudgetWarningMessage(budget: BudgetState): string {
-  const remaining = budget.remaining.toLocaleString()
-  const percent = Math.round((budget.remaining / budget.total) * 100)
-
-  return `Budget low: ${remaining} tokens remaining (${percent}%).`
 }

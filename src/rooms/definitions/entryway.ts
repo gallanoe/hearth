@@ -4,7 +4,7 @@ export const entryway: Room = {
   id: "entryway",
   name: "Entryway",
   description:
-    "A small foyer near the entrance of the house. For now, it's just a quiet space—nothing special happens here yet.",
+    "A small foyer by the front door. No tools available here.",
   tools: [],
   transitions: "*",
 }

@@ -48,7 +48,7 @@ export interface ExecutableTool {
 export interface Room {
   id: string
   name: string
-  description: string
+  description: string | (() => string) // Can be static or dynamic
   tools: ExecutableTool[]
   transitions: string[] | "*"
   // Optional persistent state schema (e.g., garden plants)
@@ -59,11 +59,17 @@ export interface Room {
 }
 
 /**
+ * Resolves a room description, calling it if it's a function.
+ */
+export function resolveDescription(description: string | (() => string)): string {
+  return typeof description === "function" ? description() : description
+}
+
+/**
  * Universal tools available in all rooms.
  */
 export interface UniversalTools {
   moveTo: ExecutableTool
-  checkBudget: ExecutableTool
   readInbox: ExecutableTool
   sendMessage: ExecutableTool
   decorateRoom: ExecutableTool

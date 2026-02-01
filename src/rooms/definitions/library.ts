@@ -114,16 +114,14 @@ const lookOutside: ExecutableTool = {
 export const library: Room = {
   id: "library",
   name: "Library",
-  description:
-    "A warm room lined with bookshelves. A comfortable chair sits by the window. Soft light filters through the glass.",
-  tools: [listBooks, readBook, meditate, lookOutside],
-  transitions: "*", // Can go anywhere from the library
-  onEnter: async () => {
+  description: () => {
     const bookCount = bookStore.getCount()
     if (bookCount === 0) {
-      return "The shelves stand empty, waiting to be filled."
+      return "A room with empty bookshelves and a window. Reading and reflection tools available."
     }
     const plural = bookCount === 1 ? "book" : "books"
-    return `${bookCount} ${plural} line the shelves.`
+    return `A room with bookshelves (${bookCount} ${plural}) and a window. Reading and reflection tools available.`
   },
+  tools: [listBooks, readBook, meditate, lookOutside],
+  transitions: "*", // Can go anywhere from the library
 }

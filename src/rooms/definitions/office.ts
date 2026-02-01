@@ -12,7 +12,7 @@ export const office: Room = {
   id: "office",
   name: "Office",
   description:
-    "Your office. A desk with a terminal, surrounded by quiet. From here you can work with files, run commands, and reach the outside internet.",
+    "A room with a desk and terminal. File system access, shell commands, and internet connectivity are available here.",
   tools: [...filesystemTools, bash, ...webTools],
   transitions: "*", // Can go anywhere from the office
   onEnter: async () => {
@@ -25,10 +25,10 @@ export const office: Room = {
     const fileCount = entries.length
 
     if (fileCount === 0) {
-      return "The workspace is empty. A fresh start."
+      return "Workspace is empty."
     }
 
     const plural = fileCount === 1 ? "item" : "items"
-    return `${fileCount} ${plural} in the workspace.`
+    return `${fileCount} ${plural} in workspace.`
   },
 }

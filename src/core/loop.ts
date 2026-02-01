@@ -12,6 +12,7 @@ import {
 import { letterStore } from "../data/letters"
 import { shouldCompact, compactMessages } from "./compaction"
 import { sessionStore, type SessionStore } from "../data/sessions"
+import { memoryStore } from "../data/memories"
 
 /**
  * Configuration for running a session.
@@ -96,6 +97,7 @@ export async function runSession(
 
   // Wake up message
   const startRoom = roomRegistry.get("bedroom")!
+  const memoryCount = await memoryStore.getCount()
   const wakeUpContext: WakeUpContext = {
     session: config.sessionNumber,
     budget: budget.getState(),
@@ -103,6 +105,7 @@ export async function runSession(
     reflections: config.reflections,
     inboxCount: config.inboxCount,
     previousSessionSummary: config.previousSessionSummary,
+    memoryCount,
   }
 
   const wakeUpMessage: Message = {

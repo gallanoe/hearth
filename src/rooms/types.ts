@@ -71,4 +71,7 @@ export interface UniversalTools {
   readInbox: ExecutableTool
   sendMessage: ExecutableTool
   decorateRoom: ExecutableTool
+  remember: ExecutableTool
+  recall: ExecutableTool
+  forget: ExecutableTool
 }

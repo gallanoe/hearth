@@ -4,6 +4,7 @@ import { resolveDescription } from "./types"
 import type { ToolDefinition } from "../llm/types"
 import { letterStore, formatRelativeTime, formatDate } from "../data/letters"
 import { roomDecorationStore } from "../data/decorations"
+import { remember, recall, forget } from "./definitions/universal-tools/memory"
 
 /**
  * Registry for all rooms in the house.
@@ -95,6 +96,9 @@ export class RoomRegistry {
       this.universalTools.readInbox,
       this.universalTools.sendMessage,
       this.universalTools.decorateRoom,
+      this.universalTools.remember,
+      this.universalTools.recall,
+      this.universalTools.forget,
     ]
 
     return allTools.map((tool) => ({
@@ -113,6 +117,9 @@ export class RoomRegistry {
     if (toolName === "read_inbox") return this.universalTools.readInbox
     if (toolName === "send_message") return this.universalTools.sendMessage
     if (toolName === "decorate_room") return this.universalTools.decorateRoom
+    if (toolName === "remember") return this.universalTools.remember
+    if (toolName === "recall") return this.universalTools.recall
+    if (toolName === "forget") return this.universalTools.forget
 
     // Check room-specific tools
     const room = this.rooms.get(roomId)
@@ -330,7 +337,7 @@ Use action="reset" to restore the room's original description.`,
       },
     }
 
-    return { moveTo, readInbox, sendMessage, decorateRoom }
+    return { moveTo, readInbox, sendMessage, decorateRoom, remember, recall, forget }
   }
 }
 

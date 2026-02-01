@@ -14,6 +14,7 @@ export interface WakeUpContext {
   reflections: string[] // Relevant past reflections
   inboxCount: number // Unread messages
   previousSessionSummary: string | null // Summary of the previous session
+  memoryCount: number // Number of stored memories
 }
 
 /**
@@ -96,6 +97,13 @@ export function buildWakeUpMessage(context: WakeUpContext): string {
     parts.push(`${context.inboxCount} unread ${plural} in your inbox.`)
   }
 
+  // Memory status
+  if (context.memoryCount > 0) {
+    parts.push("")
+    const plural = context.memoryCount === 1 ? "memory" : "memories"
+    parts.push(`${context.memoryCount} stored ${plural}. Use recall to search them.`)
+  }
+
   return parts.join("\n")
 }
 
@@ -124,6 +132,9 @@ export function buildRoomEntryMessage(room: Room, extraContext?: string): string
   }
   parts.push("- move_to: Move to another room in the house.")
   parts.push("- decorate_room: Customize this room's description.")
+  parts.push("- remember: Store something in long-term memory.")
+  parts.push("- recall: Search your memories and past sessions.")
+  parts.push("- forget: Remove a memory by ID.")
 
   return parts.join("\n")
 }

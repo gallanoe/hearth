@@ -2,6 +2,7 @@ import { z } from "zod"
 import type { Room, ExecutableTool, ToolResult } from "../types"
 import { bookStore, paginateContent } from "../../data/books"
 import { reflectionStore } from "../../data/reflections"
+import { memoryStore } from "../../data/memories"
 import { getRandomWindowEvent } from "../../data/window-events"
 
 const listBooks: ExecutableTool = {
@@ -87,6 +88,9 @@ const meditate: ExecutableTool = {
 
     // Store the reflection for future retrieval
     reflectionStore.add(thoughts, context.currentSession)
+
+    // Also persist to long-term memory for cross-session search
+    await memoryStore.add(thoughts, ["reflection", "meditation"], context.currentSession, context.currentRoom)
 
     console.log(`💭 Reflected on: ${thoughts}`)
 

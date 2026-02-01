@@ -33,8 +33,8 @@ let lastResult: SessionResult | null = null // Fallback for when DB is unavailab
 
 // Default budget config
 const defaultBudget = {
-  totalTokens: 100_000,
-  warningThreshold: 50_000,
+  totalTokens: 1_000_000,
+  warningThreshold: 200_000,
 }
 
 const server = Bun.serve({

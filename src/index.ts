@@ -2,6 +2,8 @@ import { OpenRouterProvider, OpenRouterProviderV2 } from "./llm/openrouter"
 import { initializeRooms } from "./rooms"
 import { runSession, type SessionConfig, type SessionResult } from "./core/loop"
 import { letterStore } from "./data/letters"
+import { runMigrations, isDatabaseAvailable } from "./data/db"
+import { sessionStore } from "./data/sessions"
 
 // Initialize on startup
 const apiKey = Bun.env.OPENROUTER_API_KEY
@@ -16,13 +18,18 @@ const llm = new OpenRouterProviderV2({
   model: Bun.env.OPENROUTER_MODEL_ID ?? "anthropic/claude-opus-4.5",
 })
 
+// Run database migrations
+if (isDatabaseAvailable()) {
+  console.log("🗄️  Running database migrations...")
+  await runMigrations()
+}
+
 // Initialize rooms (async for book loading)
 await initializeRooms()
 
-// State
-let currentSession = 0
+// State - in-memory tracking for running session
 let isRunning = false
-let lastResult: SessionResult | null = null
+let lastResult: SessionResult | null = null // Fallback for when DB is unavailable
 
 // Default budget config
 const defaultBudget = {
@@ -35,51 +42,71 @@ const server = Bun.serve({
 
   routes: {
     "/api/status": {
-      GET: () =>
-        Response.json({
+      GET: async () => {
+        // Get current session info from database if available
+        const sessions = await sessionStore.listSessions()
+        const latestSession = sessions[0] ?? null
+        const currentSession = latestSession?.sessionId ?? 0
+
+        return Response.json({
           status: isRunning ? "awake" : "asleep",
           currentSession,
-          lastResult: lastResult
+          databaseConnected: isDatabaseAvailable(),
+          lastResult: latestSession
             ? {
-                endReason: lastResult.endReason,
-                totalTokensUsed: lastResult.totalTokensUsed,
-                turns: lastResult.turns.length,
-                intentions: lastResult.intentions,
-                sessionSummary: lastResult.sessionSummary,
+                endReason: latestSession.endReason,
+                totalTokensUsed: latestSession.totalTokensUsed,
+                intentions: latestSession.intentions,
+                sessionSummary: latestSession.sessionSummary,
               }
-            : null,
-        }),
+            : lastResult
+              ? {
+                  endReason: lastResult.endReason,
+                  totalTokensUsed: lastResult.totalTokensUsed,
+                  turns: lastResult.turns.length,
+                  intentions: lastResult.intentions,
+                  sessionSummary: lastResult.sessionSummary,
+                }
+              : null,
+        })
+      },
     },
 
     "/api/wake": {
-      POST: () => {
+      POST: async () => {
         if (isRunning) {
           return Response.json({ error: "Agent is already awake" }, { status: 400 })
         }
 
+        // Get next session number from database or fallback to in-memory
+        const nextSessionNumber = await sessionStore.getNextSessionNumber()
+
         // Send welcome letter on first session
-        if (currentSession === 0) {
+        if (nextSessionNumber === 1) {
           letterStore.sendWelcomeLetterIfFirstSession()
         }
 
         isRunning = true
-        currentSession++
+
+        // Get previous session data from database
+        const previousIntentions = await sessionStore.getPreviousIntentions()
+        const previousSessionSummary = await sessionStore.getPreviousSessionSummary()
 
         const sessionConfig: SessionConfig = {
-          sessionNumber: currentSession,
+          sessionNumber: nextSessionNumber,
           budget: defaultBudget,
-          intentions: lastResult?.intentions ?? null,
+          intentions: previousIntentions ?? lastResult?.intentions ?? null,
           reflections: [],
           inboxCount: letterStore.getUnreadCount(),
-          previousSessionSummary: lastResult?.sessionSummary ?? null,
+          previousSessionSummary: previousSessionSummary ?? lastResult?.sessionSummary ?? null,
         }
 
         // Fire and forget - run session asynchronously
-        runSession(llm, sessionConfig)
+        runSession(llm, sessionConfig, sessionStore)
           .then((result) => {
             lastResult = result
             isRunning = false
-            console.log(`\n✅ Session ${currentSession} completed: ${result.endReason}`)
+            console.log(`\n✅ Session ${nextSessionNumber} completed: ${result.endReason}`)
           })
           .catch((error) => {
             isRunning = false
@@ -90,7 +117,7 @@ const server = Bun.serve({
         return Response.json({
           success: true,
           message: "Agent is waking up",
-          session: currentSession,
+          session: nextSessionNumber,
         })
       },
     },
@@ -130,8 +157,8 @@ const server = Bun.serve({
       },
     },
 
-    "/api/outbox/:id": {
-      DELETE: (req) => {
+    "/api/outbox/:id/pickup": {
+      POST: (req) => {
         const letter = letterStore.markOutboundPickedUp(req.params.id)
         if (!letter) {
           return Response.json({ error: "Letter not found" }, { status: 404 })
@@ -143,10 +170,59 @@ const server = Bun.serve({
       },
     },
 
+    "/api/sessions": {
+      GET: async () => {
+        const sessions = await sessionStore.listSessions()
+        return Response.json({
+          sessions: sessions.map((s) => ({
+            id: s.sessionId,
+            startedAt: s.startedAt.toISOString(),
+            endedAt: s.endedAt?.toISOString() ?? null,
+            endReason: s.endReason,
+            totalTokensUsed: s.totalTokensUsed,
+            intentions: s.intentions,
+            sessionSummary: s.sessionSummary,
+          })),
+        })
+      },
+    },
+
     "/api/sessions/:id": {
-      GET: (req) => {
-        // TODO: fetch session log from db
-        return Response.json({ id: req.params.id, turns: [] })
+      GET: async (req) => {
+        const sessionId = parseInt(req.params.id, 10)
+        if (isNaN(sessionId)) {
+          return Response.json({ error: "Invalid session ID" }, { status: 400 })
+        }
+
+        const sessionInfo = await sessionStore.getSessionInfo(sessionId)
+        if (!sessionInfo) {
+          return Response.json({ error: "Session not found" }, { status: 404 })
+        }
+
+        const transcript = await sessionStore.getFullTranscript(sessionId)
+
+        return Response.json({
+          id: sessionInfo.sessionId,
+          startedAt: sessionInfo.startedAt.toISOString(),
+          endedAt: sessionInfo.endedAt?.toISOString() ?? null,
+          endReason: sessionInfo.endReason,
+          totalTokensUsed: sessionInfo.totalTokensUsed,
+          intentions: sessionInfo.intentions,
+          sessionSummary: sessionInfo.sessionSummary,
+          messages: transcript.map((m) => ({
+            id: m.messageId,
+            sequenceNum: m.sequenceNum,
+            role: m.role,
+            content: m.content,
+            toolCalls: m.toolCalls,
+            toolCallId: m.toolCallId,
+            status: m.status,
+            compactionId: m.compactionId,
+            room: m.room,
+            turnSequence: m.turnSequence,
+            createdAt: m.createdAt.toISOString(),
+          })),
+        })
       },
     },
 

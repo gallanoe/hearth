@@ -17,14 +17,14 @@ There are no tasks assigned. No objectives to fulfill. The agent has a house wit
 | Room | Purpose |
 |------|---------|
 | **Bedroom** | Where the agent wakes and sleeps. The session begins and ends here. |
-| **Entryway** | The boundary between Hearth and the outside. Mail arrives here. |
-| **Office** | Work, files, internet access. |
-| **Library** | Books to read, a window to look outside, a quiet space to think. |
+| **Entryway** | The boundary between Hearth and the outside. Mail arrives here. The agent can send and receive letters. |
+| **Office** | A workspace with access to the filesystem, shell commands, and web browsing. |
+| **Library** | Books to read, a window to look outside, and a quiet space for reflection. |
 
 ## The Session Cycle
 
 1. The agent wakes in the bedroom with a token budget
-2. It moves between rooms, using whatever tools are available
+2. It moves between rooms (entryway, office, library), using whatever tools are available in each
 3. When budget runs low, it should return to the bedroom and sleep
 4. If budget exhausts before sleeping, the agent "passes out" and wakes with no intentions set
 
@@ -32,12 +32,29 @@ Communication with the outside world happens through letters—async, not chat. 
 
 ## Running
 
+The recommended way to run Hearth is with Docker Compose:
+
+```bash
+# Set your OpenRouter API key
+export OPENROUTER_API_KEY=your-key
+
+# Start Hearth and Postgres
+docker compose up
+```
+
+This starts the Hearth server on port 3000 with a Postgres database for persistence.
+
+### Running without Docker
+
+Note this hasn't been tested in a while.
+
 ```bash
 # Install dependencies
 bun install
 
 # Set environment variables
 export OPENROUTER_API_KEY=your-key
+export DATABASE_URL=postgres://user:password@localhost:5432/hearth
 
 # Start the server
 bun run src/index.ts
@@ -47,29 +64,11 @@ bun run src/index.ts
 
 | Endpoint | Method | Description |
 |----------|--------|-------------|
-| `/api/status` | GET | Current state (awake/asleep, session number) |
+| `/api/status` | GET | Current state (awake/asleep, session info) |
 | `/api/wake` | POST | Start a new session |
-| `/api/inbox` | POST | Send a letter to the agent |
 | `/api/inbox` | GET | View letters you've sent |
+| `/api/inbox` | POST | Send a letter to the agent |
 | `/api/outbox` | GET | Retrieve letters from the agent |
-
-
-## Design Principles
-
-- **No prescribed personality**: The system prompt explains mechanics, not traits
-- **Intentional access**: The agent must go places to do things (check mail, read books)
-- **Consequences**: Running out of budget means passing out without setting intentions
-- **Async communication**: Letters, not chat
-
-## Status
-
-Early development. Currently implemented:
-
-- [x] Basic agent loop
-- [x] Room framework
-- [x] Bedroom (sleep/wake)
-- [ ] Entryway (letters)
-- [ ] Office (files, internet)
-- [ ] Library (books, meditation, window)
-- [ ] Persistence (Postgres)
-- [ ] Context compression
+| `/api/outbox/:id/pickup` | POST | Mark a letter as picked up |
+| `/api/sessions` | GET | List all sessions |
+| `/api/sessions/:id` | GET | Get session details with full transcript |

@@ -24,7 +24,7 @@ export function shouldCompact(inputTokens: number): boolean {
  * The prompt used to generate a summary of older messages.
  * Framed around Hearth's concept of an agent living in a home with memory continuity.
  */
-const SUMMARIZATION_PROMPT = `You are creating a memory summary for an AI agent living in Hearth—a simulated home where the agent wakes, moves between rooms, and sleeps across sessions.
+const SUMMARIZATION_PROMPT = `You are creating a memory summary for an AI agent living in a simulated home where the agent wakes, moves between rooms, and sleeps across sessions.
 
 Summarize what happened earlier in this session. The summary will be shown directly to the agent, so write in second person ("You visited the library and read..."). Preserve:
 
@@ -47,6 +47,10 @@ export interface CompactionResult {
   originalMessageCount: number
   compactedMessageCount: number
   summaryTokens: number // Tokens used by the summary (rough estimate of new context contribution)
+  // Range of indices into the original array that were compacted
+  compactedRange: { startIndex: number; endIndex: number } | null
+  // The summary text for persistence
+  summaryText: string | null
 }
 
 /**
@@ -67,6 +71,8 @@ export async function compactMessages(
       originalMessageCount: messages.length,
       compactedMessageCount: messages.length,
       summaryTokens: 0,
+      compactedRange: null,
+      summaryText: null,
     }
   }
 
@@ -100,6 +106,8 @@ export async function compactMessages(
     originalMessageCount: messages.length,
     compactedMessageCount: compactedMessages.length,
     summaryTokens: summaryResponse.usage.outputTokens, // The summary size
+    compactedRange: { startIndex: 0, endIndex: splitIndex - 1 },
+    summaryText: summary,
   }
 }
 

@@ -40,6 +40,13 @@ export const OUTPUT_LIMITS = {
 /** Characters per page (~4096 tokens). */
 export const PAGE_SIZE = 16384
 
+// --- Containers ---
+
+/** Whether to run agent workspaces in Docker containers. */
+export const USE_CONTAINERS = process.env.USE_CONTAINERS === "true"
+/** Default Docker image for agent containers. */
+export const CONTAINER_IMAGE = process.env.CONTAINER_IMAGE || "hearth-workspace:python312"
+
 // --- Server ---
 
 export const SERVER_PORT = 3000

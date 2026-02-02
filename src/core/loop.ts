@@ -1,5 +1,5 @@
-import type { LLMProvider, Message, ToolCall } from "../llm/types"
-import type { AgentContext, ToolResult } from "../rooms/types"
+import type { LLMProvider, Message, ToolCall } from "../types/llm"
+import type { AgentContext, ToolResult } from "../types/rooms"
 import { roomRegistry } from "../rooms/registry"
 import { BudgetTracker, type BudgetConfig } from "./budget"
 import {

@@ -1,6 +1,6 @@
 import type { BudgetState } from "./budget"
-import type { Room } from "../rooms/types"
-import { resolveDescription } from "../rooms/types"
+import type { Room } from "../types/rooms"
+import { resolveDescription } from "../types/rooms"
 import { personaStore } from "../data/persona"
 import { roomDecorationStore } from "../data/decorations"
 

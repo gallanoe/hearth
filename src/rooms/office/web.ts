@@ -6,8 +6,8 @@ import { z } from "zod"
 import { Readability } from "@mozilla/readability"
 import TurndownService from "turndown"
 import { JSDOM } from "jsdom"
-import type { ExecutableTool, ToolResult } from "../../types"
-import { getSearchProvider } from "../../../data/search"
+import type { ExecutableTool, ToolResult } from "../../types/rooms"
+import { getSearchProvider } from "../../data/search"
 import { truncateOutput, OUTPUT_LIMITS, DEFAULT_TIMEOUT } from "./utils"
 
 /**

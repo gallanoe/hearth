@@ -5,7 +5,7 @@
 import { z } from "zod"
 import { readdir, stat, mkdir } from "node:fs/promises"
 import { dirname, join } from "node:path"
-import type { ExecutableTool, ToolResult } from "../../types"
+import type { ExecutableTool, ToolResult } from "../../types/rooms"
 import {
   resolvePath,
   truncateOutput,

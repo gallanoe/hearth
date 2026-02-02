@@ -2,13 +2,15 @@ import { test, expect, describe } from "bun:test"
 import {
   shouldCompact,
   compactMessages,
+  type CompactionResult,
+} from "./compaction"
+import {
   CONTEXT_WINDOW,
   COMPACTION_THRESHOLD,
   COMPACTION_TRIGGER,
   RECENT_MESSAGES_TO_KEEP,
-  type CompactionResult,
-} from "./compaction"
-import type { Message, LLMProvider, LLMResponse, ToolDefinition } from "../llm/types"
+} from "../config"
+import type { Message, LLMProvider, LLMResponse, ToolDefinition } from "../types/llm"
 
 describe("compaction", () => {
   describe("shouldCompact", () => {

@@ -1,6 +1,6 @@
 import { z } from "zod"
-import type { Room, ExecutableTool, ToolResult, AgentContext } from "../types"
-import { personaStore } from "../../data/persona"
+import type { Room, ExecutableTool, ToolResult, AgentContext } from "../types/rooms"
+import { personaStore } from "../data/persona"
 
 const sleep: ExecutableTool = {
   name: "shutdown",

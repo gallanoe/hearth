@@ -1,7 +1,7 @@
 import { sql, isDatabaseAvailable } from "./db"
-import type { Message, ToolCall } from "../llm/types"
+import type { Message, ToolCall } from "../types/llm"
 import type { TurnRecord } from "../core/loop"
-import type { ToolResult } from "../rooms/types"
+import type { ToolResult } from "../types/rooms"
 
 /**
  * Session information returned from queries.

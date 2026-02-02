@@ -1,10 +1,11 @@
-import { z } from "zod"
-import type { Room, ExecutableTool, AgentContext, ToolResult, UniversalTools } from "./types"
-import { resolveDescription } from "./types"
-import type { ToolDefinition } from "../llm/types"
-import { letterStore, formatRelativeTime, formatDate } from "../data/letters"
+import type { Room, ExecutableTool, AgentContext, UniversalTools } from "../types/rooms"
+import { resolveDescription } from "../types/rooms"
+import type { ToolDefinition } from "../types/llm"
 import { roomDecorationStore } from "../data/decorations"
-import { remember, recall, forget } from "./definitions/universal-tools/memory"
+import { createMoveTo } from "../tools/navigation"
+import { readInbox, sendMessage } from "../tools/communication"
+import { createDecorateRoom } from "../tools/decorations"
+import { remember, recall, forget } from "../tools/memory"
 
 /**
  * Registry for all rooms in the house.
@@ -16,7 +17,15 @@ export class RoomRegistry {
   private universalTools: UniversalTools
 
   constructor() {
-    this.universalTools = this.createUniversalTools()
+    this.universalTools = {
+      moveTo: createMoveTo(this),
+      readInbox,
+      sendMessage,
+      decorateRoom: createDecorateRoom(this),
+      remember,
+      recall,
+      forget,
+    }
   }
 
   /**
@@ -148,196 +157,6 @@ export class RoomRegistry {
 
     const state = this.roomStates.get(roomId)
     return room.onExit(context, state)
-  }
-
-  /**
-   * Create the universal tools available in all rooms.
-   */
-  private createUniversalTools(): UniversalTools {
-    const registry = this
-
-    const moveTo: ExecutableTool = {
-      name: "move_to",
-      description: "Move to another room in the house.",
-      inputSchema: z.object({
-        room: z.string().describe("The ID of the room to move to"),
-      }),
-      execute: async (params, context): Promise<ToolResult> => {
-        const targetRoom = params.room as string
-
-        if (!registry.canTransition(context.currentRoom, targetRoom)) {
-          const room = registry.get(context.currentRoom)
-          const availableRooms = room?.transitions === "*"
-            ? registry.getAllRoomIds().filter((id) => id !== context.currentRoom)
-            : room?.transitions ?? []
-
-          return {
-            success: false,
-            output: `Cannot move to "${targetRoom}" from here. Available rooms: ${availableRooms.join(", ")}`,
-          }
-        }
-
-        // Signal the move (actual transition handled by loop)
-        context.signals.requestedMove = targetRoom
-
-        const targetRoomDef = registry.get(targetRoom)
-        return {
-          success: true,
-          output: `Moving to ${targetRoomDef?.name ?? targetRoom}...`,
-        }
-      },
-    }
-
-    const readInbox: ExecutableTool = {
-      name: "read_inbox",
-      description:
-        "Read all letters from the outside. Marks them as read. Returns letter contents with timestamps.",
-      inputSchema: z.object({}),
-      execute: async (): Promise<ToolResult> => {
-        const letters = letterStore.getUnreadInbound()
-
-        if (letters.length === 0) {
-          return {
-            success: true,
-            output: "The mailbox is empty. No new letters.",
-          }
-        }
-
-        // Mark all as read
-        letterStore.markAsRead(letters.map((l) => l.id))
-
-        // Format output
-        const plural = letters.length === 1 ? "letter" : "letters"
-        const parts: string[] = [`${letters.length} ${plural}:`, ""]
-
-        for (const letter of letters) {
-          const relative = formatRelativeTime(letter.sentAt)
-          const formatted = formatDate(letter.sentAt)
-          parts.push("---")
-          parts.push(`Received ${relative} (${formatted})`)
-          parts.push("")
-          parts.push(letter.content)
-          parts.push("---")
-          parts.push("")
-        }
-
-        return {
-          success: true,
-          output: parts.join("\n").trim(),
-        }
-      },
-    }
-
-    const sendMessage: ExecutableTool = {
-      name: "send_message",
-      description: "Write and send a letter to the outside.",
-      inputSchema: z.object({
-        content: z.string().describe("The content of your letter to send."),
-      }),
-      execute: async (params): Promise<ToolResult> => {
-        const content = params.content as string
-
-        if (!content || content.trim().length === 0) {
-          return {
-            success: false,
-            output: "Cannot send an empty letter.",
-          }
-        }
-
-        letterStore.addOutbound(content.trim())
-
-        return {
-          success: true,
-          output: `Your letter has been sent.`,
-        }
-      },
-    }
-
-    const decorateRoom: ExecutableTool = {
-      name: "decorate_room",
-      description: `View or customize the description of the room you're currently in.
-
-CONTEXT: Room descriptions are shown when you enter a room and help set the atmosphere. By decorating a room, you can personalize your space—adding details, changing the mood, or making it feel more like home.
-
-Use action="view" to see the current room description (and whether it's been customized).
-Use action="decorate" to set a new custom description for this room.
-Use action="reset" to restore the room's original description.`,
-      inputSchema: z.object({
-        action: z
-          .enum(["view", "decorate", "reset"])
-          .describe("The action to perform: view current description, decorate with a new one, or reset to default."),
-        newDescription: z
-          .string()
-          .optional()
-          .describe("Required when action is 'decorate'. The new description for this room."),
-      }),
-      execute: async (params, context): Promise<ToolResult> => {
-        const action = params.action as "view" | "decorate" | "reset"
-        const newDescription = params.newDescription as string | undefined
-        const currentRoomId = context.currentRoom
-        const currentRoom = registry.get(currentRoomId)
-
-        if (!currentRoom) {
-          return {
-            success: false,
-            output: `Error: Could not find the current room "${currentRoomId}".`,
-          }
-        }
-
-        const defaultDescription = resolveDescription(currentRoom.description)
-
-        switch (action) {
-          case "view": {
-            const decoratedDescription = roomDecorationStore.getDecoratedDescription(currentRoomId)
-            const isDecorated = roomDecorationStore.isDecorated(currentRoomId)
-
-            let output = `Current description of ${currentRoom.name}${isDecorated ? " (decorated)" : " (default)"}:\n\n${decoratedDescription ?? defaultDescription}`
-
-            return { success: true, output }
-          }
-
-          case "decorate": {
-            if (!newDescription || newDescription.trim().length === 0) {
-              return {
-                success: false,
-                output: "Cannot set an empty description. Please provide the new description for this room.",
-              }
-            }
-
-            const previousDecoration = roomDecorationStore.setDecoration(currentRoomId, newDescription.trim())
-            const previousText = previousDecoration?.description ?? defaultDescription
-
-            return {
-              success: true,
-              output: `${currentRoom.name} has been decorated.`,
-            }
-          }
-
-          case "reset": {
-            const wasDecorated = roomDecorationStore.isDecorated(currentRoomId)
-
-            if (!wasDecorated) {
-              return {
-                success: true,
-                output: `${currentRoom.name} already has its original description. No changes made.`,
-              }
-            }
-
-            const removedDecoration = roomDecorationStore.removeDecoration(currentRoomId)
-
-            return {
-              success: true,
-              output: `${currentRoom.name} decoration removed.\n\nPrevious (custom) description:\n${removedDecoration?.description}\n\nOriginal description restored:\n${defaultDescription}`,
-            }
-          }
-
-          default:
-            return { success: false, output: `Unknown action: ${action}` }
-        }
-      },
-    }
-
-    return { moveTo, readInbox, sendMessage, decorateRoom, remember, recall, forget }
   }
 }
 

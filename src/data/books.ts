@@ -19,10 +19,7 @@ export interface PaginatedContent {
   isComplete: boolean  // True if entire book fits in one page
 }
 
-/**
- * Characters per page (~4096 tokens).
- */
-export const PAGE_SIZE = 16384
+import { PAGE_SIZE } from "../config"
 
 /**
  * Paginates book content with ellipses indicators.

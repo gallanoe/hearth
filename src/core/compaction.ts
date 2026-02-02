@@ -1,17 +1,5 @@
-import type { LLMProvider, Message } from "../llm/types"
-
-/**
- * Context window configuration.
- * These are separate from the session token budget.
- */
-export const CONTEXT_WINDOW = 200_000 // Model's maximum context size
-export const COMPACTION_THRESHOLD = 0.9 // Trigger compaction at 90%
-export const RECENT_MESSAGES_TO_KEEP = 10 // Preserve recent messages for continuity
-
-/**
- * The token threshold at which compaction should trigger.
- */
-export const COMPACTION_TRIGGER = CONTEXT_WINDOW * COMPACTION_THRESHOLD
+import type { LLMProvider, Message } from "../types/llm"
+import { COMPACTION_TRIGGER, RECENT_MESSAGES_TO_KEEP } from "../config"
 
 /**
  * Check if compaction is needed based on current context size.

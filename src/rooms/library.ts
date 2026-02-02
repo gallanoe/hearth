@@ -1,9 +1,9 @@
 import { z } from "zod"
-import type { Room, ExecutableTool, ToolResult } from "../types"
-import { bookStore, paginateContent } from "../../data/books"
-import { reflectionStore } from "../../data/reflections"
-import { memoryStore } from "../../data/memories"
-import { getRandomWindowEvent } from "../../data/window-events"
+import type { Room, ExecutableTool, ToolResult } from "../types/rooms"
+import { bookStore, paginateContent } from "../data/books"
+import { reflectionStore } from "../data/reflections"
+import { memoryStore } from "../data/memories"
+import { getRandomWindowEvent } from "../data/window-events"
 
 const listBooks: ExecutableTool = {
   name: "list_books",

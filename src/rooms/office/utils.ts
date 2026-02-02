@@ -3,12 +3,9 @@
  */
 import { resolve, join } from "node:path"
 import { stat, mkdir } from "node:fs/promises"
+import { WORKSPACE_ROOT, OUTPUT_LIMITS, DEFAULT_TIMEOUT } from "../../config"
 
-/**
- * The agent's workspace root directory.
- * All file operations are scoped to this directory.
- */
-export const WORKSPACE_ROOT = process.env.AGENT_WORKSPACE || "/home/agent"
+export { WORKSPACE_ROOT, OUTPUT_LIMITS, DEFAULT_TIMEOUT }
 
 /**
  * Ensures the workspace directory exists.
@@ -17,20 +14,6 @@ export const WORKSPACE_ROOT = process.env.AGENT_WORKSPACE || "/home/agent"
 export async function ensureWorkspaceExists(): Promise<void> {
   await mkdir(WORKSPACE_ROOT, { recursive: true })
 }
-
-/**
- * Output limits for different tools.
- */
-export const OUTPUT_LIMITS = {
-  bash: 10_000,
-  read: 50_000,
-  fetch: 50_000,
-} as const
-
-/**
- * Default timeout for commands and fetches.
- */
-export const DEFAULT_TIMEOUT = 30_000
 
 /**
  * Resolves a user-provided path to an absolute path within the workspace.

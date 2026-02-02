@@ -2,7 +2,7 @@
  * Bash command execution tool for the office room.
  */
 import { z } from "zod"
-import type { ExecutableTool, ToolResult } from "../../types"
+import type { ExecutableTool, ToolResult } from "../../types/rooms"
 import { truncateOutput, OUTPUT_LIMITS, WORKSPACE_ROOT, DEFAULT_TIMEOUT } from "./utils"
 
 /**

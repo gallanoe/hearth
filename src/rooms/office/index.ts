@@ -2,11 +2,11 @@
  * Office room definition.
  * The agent's workspace with file system, bash, and internet access.
  */
-import type { Room } from "../types"
-import { filesystemTools } from "./office-tools/filesystem"
-import { bash } from "./office-tools/bash"
-import { webTools } from "./office-tools/web"
-import { WORKSPACE_ROOT, ensureWorkspaceExists } from "./office-tools/utils"
+import type { Room } from "../../types/rooms"
+import { filesystemTools } from "./filesystem"
+import { bash } from "./bash"
+import { webTools } from "./web"
+import { WORKSPACE_ROOT, ensureWorkspaceExists } from "./utils"
 
 export const office: Room = {
   id: "office",

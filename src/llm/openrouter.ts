@@ -5,7 +5,7 @@ import type {
   LLMResponse,
   Message,
   ToolDefinition,
-} from "./types"
+} from "../types/llm"
 
 export interface OpenRouterConfig {
   apiKey: string
@@ -236,8 +236,6 @@ export class OpenRouterProviderV2 implements LLMProvider {
     if (!choice) {
       throw new Error("No response from OpenRouter")
     }
-
-    console.log('Usage - Input:', data.usage.prompt_tokens, 'Output:', data.usage.completion_tokens)
 
     // Check for tool calls
     if (choice.message.tool_calls && choice.message.tool_calls.length > 0) {

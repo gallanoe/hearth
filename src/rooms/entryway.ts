@@ -1,4 +1,4 @@
-import type { Room } from "../types"
+import type { Room } from "../types/rooms"
 
 export const entryway: Room = {
   id: "entryway",

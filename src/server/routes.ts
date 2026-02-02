@@ -1,119 +1,41 @@
-import { OpenRouterProvider, OpenRouterProviderV2 } from "./llm/openrouter"
-import { initializeRooms } from "./rooms"
-import { runSession, type SessionConfig, type SessionResult } from "./core/loop"
-import { letterStore } from "./data/letters"
-import { runMigrations, isDatabaseAvailable } from "./data/db"
-import { sessionStore } from "./data/sessions"
+import type { SessionResult } from "../core/loop"
+import { letterStore } from "../data/letters"
+import { sessionStore } from "../data/sessions"
 
-// Initialize on startup
-const apiKey = Bun.env.OPENROUTER_API_KEY
-if (!apiKey) {
-  console.error("Missing OPENROUTER_API_KEY environment variable")
-  process.exit(1)
-}
-
-const llm = new OpenRouterProviderV2({
-  apiKey,
-  appName: "Hearth",
-  model: Bun.env.OPENROUTER_MODEL_ID ?? "anthropic/claude-opus-4.5",
-})
-
-// Run database migrations
-if (isDatabaseAvailable()) {
-  console.log("🗄️  Running database migrations...")
-  await runMigrations()
-}
-
-// Initialize rooms (async for book loading)
-await initializeRooms()
-
-// State - in-memory tracking for running session
-let isRunning = false
-let lastResult: SessionResult | null = null // Fallback for when DB is unavailable
-
-// Default budget config
-const defaultBudget = {
-  totalTokens: 1_000_000,
-  warningThreshold: 200_000,
-}
-
-const server = Bun.serve({
-  port: 3000,
-
-  routes: {
+/**
+ * Creates all API route handlers.
+ * Receives shared state via closure to keep routes testable.
+ */
+export function createRoutes(state: {
+  isRunning: () => boolean
+  lastResult: () => SessionResult | null
+}) {
+  return {
     "/api/status": {
       GET: async () => {
-        // Get current session info from database if available
         const sessions = await sessionStore.listSessions()
         const latestSession = sessions[0] ?? null
         const currentSession = latestSession?.sessionId ?? 0
+        const last = state.lastResult()
 
         return Response.json({
-          status: isRunning ? "awake" : "asleep",
+          status: state.isRunning() ? "awake" : "asleep",
           currentSession,
-          databaseConnected: isDatabaseAvailable(),
+          databaseConnected: (await import("../data/db")).isDatabaseAvailable(),
           lastResult: latestSession
             ? {
                 endReason: latestSession.endReason,
                 totalTokensUsed: latestSession.totalTokensUsed,
                 sessionSummary: latestSession.sessionSummary,
               }
-            : lastResult
+            : last
               ? {
-                  endReason: lastResult.endReason,
-                  totalTokensUsed: lastResult.totalTokensUsed,
-                  turns: lastResult.turns.length,
-                  sessionSummary: lastResult.sessionSummary,
+                  endReason: last.endReason,
+                  totalTokensUsed: last.totalTokensUsed,
+                  turns: last.turns.length,
+                  sessionSummary: last.sessionSummary,
                 }
               : null,
-        })
-      },
-    },
-
-    "/api/wake": {
-      POST: async () => {
-        if (isRunning) {
-          return Response.json({ error: "Agent is already awake" }, { status: 400 })
-        }
-
-        // Get next session number from database or fallback to in-memory
-        const nextSessionNumber = await sessionStore.getNextSessionNumber()
-
-        // Send welcome letter on first session
-        if (nextSessionNumber === 1) {
-          letterStore.sendWelcomeLetterIfFirstSession()
-        }
-
-        isRunning = true
-
-        // Get previous session data from database
-        const previousSessionSummary = await sessionStore.getPreviousSessionSummary()
-
-        const sessionConfig: SessionConfig = {
-          sessionNumber: nextSessionNumber,
-          budget: defaultBudget,
-          reflections: [],
-          inboxCount: letterStore.getUnreadCount(),
-          previousSessionSummary: previousSessionSummary ?? lastResult?.sessionSummary ?? null,
-        }
-
-        // Fire and forget - run session asynchronously
-        runSession(llm, sessionConfig, sessionStore)
-          .then((result) => {
-            lastResult = result
-            isRunning = false
-            console.log(`\n✅ Session ${nextSessionNumber} completed: ${result.endReason}`)
-          })
-          .catch((error) => {
-            isRunning = false
-            console.error("Error running session:", error)
-          })
-
-        // Return immediately
-        return Response.json({
-          success: true,
-          message: "Agent is waking up",
-          session: nextSessionNumber,
         })
       },
     },
@@ -128,7 +50,7 @@ const server = Bun.serve({
         }))
         return Response.json({ letters })
       },
-      POST: async (req) => {
+      POST: async (req: Request) => {
         const body = (await req.json()) as { content: string }
         if (!body.content || body.content.trim().length === 0) {
           return Response.json({ error: "Content is required" }, { status: 400 })
@@ -154,7 +76,7 @@ const server = Bun.serve({
     },
 
     "/api/outbox/:id/pickup": {
-      POST: (req) => {
+      POST: (req: Request & { params: { id: string } }) => {
         const letter = letterStore.markOutboundPickedUp(req.params.id)
         if (!letter) {
           return Response.json({ error: "Letter not found" }, { status: 404 })
@@ -183,7 +105,7 @@ const server = Bun.serve({
     },
 
     "/api/sessions/:id": {
-      GET: async (req) => {
+      GET: async (req: Request & { params: { id: string } }) => {
         const sessionId = parseInt(req.params.id, 10)
         if (isNaN(sessionId)) {
           return Response.json({ error: "Invalid session ID" }, { status: 400 })
@@ -221,11 +143,5 @@ const server = Bun.serve({
     },
 
     "/api/*": Response.json({ message: "Not found" }, { status: 404 }),
-  },
-
-  fetch(req) {
-    return new Response("Not found", { status: 404 })
-  },
-})
-
-console.log(`🏠 Hearth listening on port ${server.port}`)
+  }
+}

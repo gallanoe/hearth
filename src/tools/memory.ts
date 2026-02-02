@@ -1,7 +1,7 @@
 import { z } from "zod"
-import type { ExecutableTool, ToolResult } from "../../types"
-import { memoryStore } from "../../../data/memories"
-import { formatRelativeTime } from "../../../data/letters"
+import type { ExecutableTool, ToolResult } from "../types/rooms"
+import { memoryStore } from "../data/memories"
+import { formatRelativeTime } from "../data/letters"
 
 export const remember: ExecutableTool = {
   name: "remember",

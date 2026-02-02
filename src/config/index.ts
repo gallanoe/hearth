@@ -17,6 +17,13 @@ export const COMPACTION_THRESHOLD = 0.9 // Trigger compaction at 90%
 export const RECENT_MESSAGES_TO_KEEP = 10 // Preserve recent messages for continuity
 export const COMPACTION_TRIGGER = CONTEXT_WINDOW * COMPACTION_THRESHOLD
 
+// --- Tool Result Decay ---
+
+/** Number of turns to keep full tool results for. */
+export const DECAY_TURN_WINDOW = 5
+/** Minimum content length (chars) before a tool result is eligible for stubbing. */
+export const DECAY_STUB_THRESHOLD = 500
+
 // --- Office Tools ---
 
 export const WORKSPACE_ROOT = process.env.AGENT_WORKSPACE || "/home/agent"

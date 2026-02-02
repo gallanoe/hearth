@@ -1,6 +1,7 @@
 import type { SessionResult } from "../core/loop"
 import { letterStore } from "../data/letters"
-import { sessionStore } from "../data/sessions"
+import { sessionStore, type TranscriptRow } from "../data/sessions"
+import { DECAY_TURN_WINDOW, DECAY_STUB_THRESHOLD } from "../config"
 
 /**
  * Creates all API route handlers.
@@ -142,6 +143,138 @@ export function createRoutes(state: {
       },
     },
 
+    "/api/sessions/:id/context/:messageId": {
+      GET: async (req: Request & { params: { id: string; messageId: string } }) => {
+        const sessionId = parseInt(req.params.id, 10)
+        const messageId = parseInt(req.params.messageId, 10)
+        if (isNaN(sessionId) || isNaN(messageId)) {
+          return Response.json({ error: "Invalid session ID or message ID" }, { status: 400 })
+        }
+
+        const url = new URL(req.url)
+        const view = url.searchParams.get("view") ?? "context"
+        if (view !== "context" && view !== "raw") {
+          return Response.json({ error: "Invalid view parameter. Use 'context' or 'raw'" }, { status: 400 })
+        }
+
+        const sessionInfo = await sessionStore.getSessionInfo(sessionId)
+        if (!sessionInfo) {
+          return Response.json({ error: "Session not found" }, { status: 404 })
+        }
+
+        const rows =
+          view === "context"
+            ? await sessionStore.getContextUpTo(sessionId, messageId)
+            : await sessionStore.getRawTranscriptUpTo(sessionId, messageId)
+
+        if (rows.length === 0) {
+          return Response.json({ error: "Message not found in session" }, { status: 404 })
+        }
+
+        let messages: Record<string, unknown>[]
+
+        if (view === "context") {
+          messages = applyDecay(rows)
+        } else {
+          messages = rows.map(formatMessage)
+        }
+
+        return Response.json({
+          session: {
+            id: sessionInfo.sessionId,
+            startedAt: sessionInfo.startedAt.toISOString(),
+            endedAt: sessionInfo.endedAt?.toISOString() ?? null,
+            endReason: sessionInfo.endReason,
+            totalTokensUsed: sessionInfo.totalTokensUsed,
+            sessionSummary: sessionInfo.sessionSummary,
+          },
+          upToMessageId: messageId,
+          view,
+          estimatedTokens: estimateTokens(messages),
+          messages,
+        })
+      },
+    },
+
     "/api/*": Response.json({ message: "Not found" }, { status: 404 }),
   }
+}
+
+/**
+ * Rough token estimate: ~4 characters per token for English text.
+ * Counts content strings and JSON-serialized tool calls.
+ */
+function estimateTokens(messages: Record<string, unknown>[]): number {
+  let chars = 0
+  for (const msg of messages) {
+    if (typeof msg.content === "string") chars += msg.content.length
+    if (msg.toolCalls) chars += JSON.stringify(msg.toolCalls).length
+  }
+  return Math.round(chars / 4)
+}
+
+function formatMessage(row: TranscriptRow): Record<string, unknown> {
+  return {
+    id: row.messageId,
+    sequenceNum: row.sequenceNum,
+    role: row.role,
+    content: row.content,
+    toolCalls: row.toolCalls,
+    toolCallId: row.toolCallId,
+    status: row.status,
+    compactionId: row.compactionId,
+    room: row.room,
+    turnSequence: row.turnSequence,
+    createdAt: row.createdAt.toISOString(),
+  }
+}
+
+/**
+ * Apply decay to context messages, simulating what the LLM would have seen.
+ * Tool results older than DECAY_TURN_WINDOW turns with content exceeding
+ * DECAY_STUB_THRESHOLD are replaced with stubs.
+ */
+function applyDecay(rows: TranscriptRow[]): Record<string, unknown>[] {
+  // Determine the current turn from the last message's turn_sequence
+  const lastRow = rows[rows.length - 1]
+  const currentTurn = lastRow.turnSequence ?? 0
+  const cutoff = currentTurn - DECAY_TURN_WINDOW
+
+  // Build a map of tool_call_id → tool name from assistant messages
+  const toolNameMap = new Map<string, string>()
+  for (const row of rows) {
+    if (row.role === "assistant" && row.toolCalls) {
+      for (const tc of row.toolCalls) {
+        toolNameMap.set(tc.id, tc.name)
+      }
+    }
+  }
+
+  return rows.map((row) => {
+    let content = row.content
+
+    if (
+      row.role === "tool" &&
+      row.toolCallId &&
+      row.turnSequence != null &&
+      row.turnSequence <= cutoff &&
+      content &&
+      content.length > DECAY_STUB_THRESHOLD
+    ) {
+      const toolName = toolNameMap.get(row.toolCallId) ?? "tool"
+      content = `[${toolName}(): returned ${content.length} chars]`
+    }
+
+    return {
+      id: row.messageId,
+      sequenceNum: row.sequenceNum,
+      role: row.role,
+      content,
+      toolCalls: row.toolCalls,
+      toolCallId: row.toolCallId,
+      room: row.room,
+      turnSequence: row.turnSequence,
+      createdAt: row.createdAt.toISOString(),
+    }
+  })
 }

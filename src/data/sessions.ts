@@ -472,6 +472,92 @@ export class SessionStore {
   }
 
   /**
+   * Get active messages for a session up to a specific message ID.
+   * Returns the reconstructed LLM context view (compacted messages excluded,
+   * compaction summaries included as active messages).
+   */
+  async getContextUpTo(sessionId: number, messageId: number): Promise<TranscriptRow[]> {
+    if (!sql) return []
+
+    try {
+      const rows = await sql`
+        SELECT
+          message_id, session_id, sequence_num, role, content,
+          tool_calls, tool_call_id, status, compaction_id,
+          room, turn_sequence, token_count, created_at
+        FROM messages
+        WHERE session_id = ${sessionId}
+          AND status = 'active'
+          AND sequence_num <= (
+            SELECT sequence_num FROM messages WHERE message_id = ${messageId} AND session_id = ${sessionId}
+          )
+        ORDER BY sequence_num
+      `
+
+      return rows.map((row: Record<string, unknown>) => ({
+        messageId: row.message_id as number,
+        sessionId: row.session_id as number,
+        sequenceNum: row.sequence_num as number,
+        role: row.role as TranscriptRow["role"],
+        content: row.content as string | null,
+        toolCalls: row.tool_calls ? (JSON.parse(row.tool_calls as string) as ToolCall[]) : null,
+        toolCallId: row.tool_call_id as string | null,
+        status: row.status as "active" | "compacted",
+        compactionId: row.compaction_id as number | null,
+        room: row.room as string | null,
+        turnSequence: row.turn_sequence as number | null,
+        tokenCount: row.token_count as number | null,
+        createdAt: new Date(row.created_at as string),
+      }))
+    } catch (error) {
+      console.error("SessionStore.getContextUpTo failed:", error)
+      return []
+    }
+  }
+
+  /**
+   * Get all messages for a session up to a specific message ID.
+   * Returns the raw transcript including both active and compacted messages.
+   */
+  async getRawTranscriptUpTo(sessionId: number, messageId: number): Promise<TranscriptRow[]> {
+    if (!sql) return []
+
+    try {
+      const rows = await sql`
+        SELECT
+          message_id, session_id, sequence_num, role, content,
+          tool_calls, tool_call_id, status, compaction_id,
+          room, turn_sequence, token_count, created_at
+        FROM messages
+        WHERE session_id = ${sessionId}
+          AND sequence_num <= (
+            SELECT sequence_num FROM messages WHERE message_id = ${messageId} AND session_id = ${sessionId}
+          )
+        ORDER BY sequence_num
+      `
+
+      return rows.map((row: Record<string, unknown>) => ({
+        messageId: row.message_id as number,
+        sessionId: row.session_id as number,
+        sequenceNum: row.sequence_num as number,
+        role: row.role as TranscriptRow["role"],
+        content: row.content as string | null,
+        toolCalls: row.tool_calls ? (JSON.parse(row.tool_calls as string) as ToolCall[]) : null,
+        toolCallId: row.tool_call_id as string | null,
+        status: row.status as "active" | "compacted",
+        compactionId: row.compaction_id as number | null,
+        room: row.room as string | null,
+        turnSequence: row.turn_sequence as number | null,
+        tokenCount: row.token_count as number | null,
+        createdAt: new Date(row.created_at as string),
+      }))
+    } catch (error) {
+      console.error("SessionStore.getRawTranscriptUpTo failed:", error)
+      return []
+    }
+  }
+
+  /**
    * Sync sequence counter from database for a session.
    * Call this when resuming a session or after database operations.
    */

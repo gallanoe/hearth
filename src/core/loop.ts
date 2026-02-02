@@ -11,6 +11,7 @@ import {
 } from "./context"
 import { letterStore } from "../data/letters"
 import { shouldCompact, compactMessages } from "./compaction"
+import { decayToolResults } from "./decay"
 import { sessionStore, type SessionStore } from "../data/sessions"
 import { memoryStore } from "../data/memories"
 import { planStore } from "../data/plans"
@@ -232,6 +233,7 @@ export async function runSession(
           role: "tool",
           content: result.output,
           toolCallId: toolCall.id,
+          decay: { turn: turnSequence, toolName: toolCall.name },
         }
         messages.push(toolResultMessage)
         await persistMessage(toolResultMessage, context.currentRoom, turnSequence)
@@ -356,6 +358,9 @@ export async function runSession(
     } catch (error) {
       console.error("Failed to record turn:", error)
     }
+
+    // Decay stale tool results to reduce context size on subsequent turns
+    decayToolResults(messages, turnSequence)
   }
 
   // Determine end reason

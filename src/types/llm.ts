@@ -1,10 +1,17 @@
 import type { z } from "zod"
 
-export interface Message {
+/** The message shape visible to LLM providers. No internal metadata. */
+export interface LLMMessage {
   role: "system" | "user" | "assistant" | "tool"
   content: string | null
   toolCalls?: ToolCall[]
   toolCallId?: string
+}
+
+/** Internal message type with optional in-memory metadata for decay. */
+export interface Message extends LLMMessage {
+  /** In-memory only. Not persisted or sent to LLM. Used by tool result decay. */
+  decay?: { turn: number; toolName: string }
 }
 
 export interface ToolCall {
@@ -33,7 +40,7 @@ export interface LLMResponse {
 export interface LLMProvider {
   send(
     system: string,
-    messages: Message[],
+    messages: LLMMessage[],
     tools?: ToolDefinition[]
   ): Promise<LLMResponse>
 }

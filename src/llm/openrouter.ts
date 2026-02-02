@@ -2,8 +2,8 @@ import { OpenRouter, fromChatMessages, toChatMessage, tool } from "@openrouter/s
 import { type Message as SDKMessage } from "@openrouter/sdk/models"
 import type {
   LLMProvider,
+  LLMMessage,
   LLMResponse,
-  Message,
   ToolDefinition,
 } from "../types/llm"
 
@@ -73,7 +73,7 @@ export class OpenRouterProvider implements LLMProvider {
 
   async send(
     system: string,
-    messages: Message[],
+    messages: LLMMessage[],
     tools?: ToolDefinition[]
   ): Promise<LLMResponse> {
     const chatMessages = [
@@ -163,7 +163,7 @@ export class OpenRouterProviderV2 implements LLMProvider {
 
   async send(
     system: string,
-    messages: Message[],
+    messages: LLMMessage[],
     tools?: ToolDefinition[]
   ): Promise<LLMResponse> {
     // Build messages in OpenAI chat format
@@ -222,6 +222,9 @@ export class OpenRouterProviderV2 implements LLMProvider {
         messages: chatMessages,
         max_tokens: this.maxTokens,
         ...(openaiTools && openaiTools.length > 0 && { tools: openaiTools }),
+        provider: {
+          sort: "throughput",
+        },
       }),
     })
 

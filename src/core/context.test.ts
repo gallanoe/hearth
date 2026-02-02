@@ -68,6 +68,8 @@ describe("buildWakeUpMessage", () => {
       inboxCount: 0,
       previousSessionSummary: null,
       memoryCount: 0,
+      openPlanCount: 0,
+      activePlanTitle: null,
     })
     expect(msg).toContain("Session 5")
     expect(msg).toContain("A cozy bedroom.")
@@ -83,6 +85,8 @@ describe("buildWakeUpMessage", () => {
       inboxCount: 0,
       previousSessionSummary: "Agent read a book and went to sleep.",
       memoryCount: 0,
+      openPlanCount: 0,
+      activePlanTitle: null,
     })
     expect(msg).toContain("Summary of last session")
     expect(msg).toContain("read a book")
@@ -97,6 +101,8 @@ describe("buildWakeUpMessage", () => {
       inboxCount: 3,
       previousSessionSummary: null,
       memoryCount: 0,
+      openPlanCount: 0,
+      activePlanTitle: null,
     })
     expect(msg).toContain("3 unread letters")
   })
@@ -110,6 +116,8 @@ describe("buildWakeUpMessage", () => {
       inboxCount: 1,
       previousSessionSummary: null,
       memoryCount: 0,
+      openPlanCount: 0,
+      activePlanTitle: null,
     })
     expect(msg).toContain("1 unread letter")
   })
@@ -123,6 +131,8 @@ describe("buildWakeUpMessage", () => {
       inboxCount: 0,
       previousSessionSummary: null,
       memoryCount: 7,
+      openPlanCount: 0,
+      activePlanTitle: null,
     })
     expect(msg).toContain("7 stored memories")
   })
@@ -136,9 +146,72 @@ describe("buildWakeUpMessage", () => {
       inboxCount: 0,
       previousSessionSummary: null,
       memoryCount: 0,
+      openPlanCount: 0,
+      activePlanTitle: null,
     })
     expect(msg).not.toContain("unread")
     expect(msg).not.toContain("stored memor")
+  })
+
+  test("includes open plan count when > 0", () => {
+    const msg = buildWakeUpMessage({
+      session: 1,
+      budget: makeBudget(),
+      currentRoom: makeRoom(),
+      reflections: [],
+      inboxCount: 0,
+      previousSessionSummary: null,
+      memoryCount: 0,
+      openPlanCount: 3,
+      activePlanTitle: null,
+    })
+    expect(msg).toContain("3 open plans")
+  })
+
+  test("includes active plan title when set", () => {
+    const msg = buildWakeUpMessage({
+      session: 1,
+      budget: makeBudget(),
+      currentRoom: makeRoom(),
+      reflections: [],
+      inboxCount: 0,
+      previousSessionSummary: null,
+      memoryCount: 0,
+      openPlanCount: 2,
+      activePlanTitle: "Read the library books",
+    })
+    expect(msg).toContain('2 open plans')
+    expect(msg).toContain('Active: "Read the library books"')
+  })
+
+  test("uses singular 'plan' for 1 plan", () => {
+    const msg = buildWakeUpMessage({
+      session: 1,
+      budget: makeBudget(),
+      currentRoom: makeRoom(),
+      reflections: [],
+      inboxCount: 0,
+      previousSessionSummary: null,
+      memoryCount: 0,
+      openPlanCount: 1,
+      activePlanTitle: null,
+    })
+    expect(msg).toContain("1 open plan.")
+  })
+
+  test("omits plan section when zero", () => {
+    const msg = buildWakeUpMessage({
+      session: 1,
+      budget: makeBudget(),
+      currentRoom: makeRoom(),
+      reflections: [],
+      inboxCount: 0,
+      previousSessionSummary: null,
+      memoryCount: 0,
+      openPlanCount: 0,
+      activePlanTitle: null,
+    })
+    expect(msg).not.toContain("open plan")
   })
 })
 
@@ -168,6 +241,7 @@ describe("buildRoomEntryMessage", () => {
     // Universal tools always listed
     expect(msg).toContain("move_to")
     expect(msg).toContain("remember")
+    expect(msg).toContain("plans")
   })
 
   test("includes extra context when provided", () => {

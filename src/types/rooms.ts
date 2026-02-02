@@ -74,4 +74,5 @@ export interface UniversalTools {
   remember: ExecutableTool
   recall: ExecutableTool
   forget: ExecutableTool
+  plans: ExecutableTool
 }

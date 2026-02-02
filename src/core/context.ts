@@ -15,6 +15,8 @@ export interface WakeUpContext {
   inboxCount: number // Unread messages
   previousSessionSummary: string | null // Summary of the previous session
   memoryCount: number // Number of stored memories
+  openPlanCount: number // Number of open plans
+  activePlanTitle: string | null // Title of the active plan, if any
 }
 
 /**
@@ -104,6 +106,17 @@ export function buildWakeUpMessage(context: WakeUpContext): string {
     parts.push(`${context.memoryCount} stored ${plural}. Use recall to search them.`)
   }
 
+  // Plan status
+  if (context.openPlanCount > 0) {
+    parts.push("")
+    const plural = context.openPlanCount === 1 ? "plan" : "plans"
+    if (context.activePlanTitle) {
+      parts.push(`${context.openPlanCount} open ${plural}. Active: "${context.activePlanTitle}".`)
+    } else {
+      parts.push(`${context.openPlanCount} open ${plural}.`)
+    }
+  }
+
   return parts.join("\n")
 }
 
@@ -135,6 +148,7 @@ export function buildRoomEntryMessage(room: Room, extraContext?: string): string
   parts.push("- remember: Store something in long-term memory.")
   parts.push("- recall: Search your memories and past sessions.")
   parts.push("- forget: Remove a memory by ID.")
+  parts.push("- plans: Create, view, and update plans that persist across sessions.")
 
   return parts.join("\n")
 }

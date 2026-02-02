@@ -125,6 +125,7 @@ export const bedroom: Room = {
   name: "Bedroom",
   description:
     "A room with a bed. Sessions begin and end here.",
-  tools: [sleep, reviewSession, editSelf],
+  // tools: [sleep, reviewSession, editSelf],
+  tools: [sleep, editSelf],
   transitions: "*", // Can go anywhere from the bedroom
 }

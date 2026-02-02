@@ -1,15 +1,11 @@
 import { test, expect, describe } from "bun:test"
 import { createMoveTo, type RoomNavigator } from "./navigation"
-import type { AgentContext, Room } from "../types/rooms"
+import type { Room } from "../types/rooms"
+import { makeTestContext } from "../test-helpers"
 import { z } from "zod"
 
-function makeContext(currentRoom: string): AgentContext {
-  return {
-    currentRoom,
-    currentSession: 1,
-    budget: { total: 1_000_000, spent: 0, remaining: 1_000_000, warningThreshold: 200_000 },
-    signals: { requestedSleep: false, requestedMove: null },
-  }
+function makeContext(currentRoom: string) {
+  return makeTestContext({ currentRoom })
 }
 
 const rooms: Record<string, Room> = {

@@ -1,21 +1,15 @@
 import { test, expect, describe, beforeEach } from "bun:test"
 import { plans } from "./planner"
 import { PlanStore } from "../data/plans"
-import type { AgentContext } from "../types/rooms"
+import { makeTestContext } from "../test-helpers"
 
 // We need to swap the singleton for testing. The tool imports planStore from data/plans,
 // so we test through the tool's execute method which uses the real singleton.
 // For isolated tests, we test the tool's parameter validation and output formatting
 // by calling execute directly (which uses the in-memory fallback since no DB is configured).
 
-function makeContext(overrides: Partial<AgentContext> = {}): AgentContext {
-  return {
-    currentRoom: "office",
-    currentSession: 1,
-    budget: { total: 1_000_000, spent: 0, remaining: 1_000_000, warningThreshold: 200_000 },
-    signals: { requestedSleep: false, requestedMove: null },
-    ...overrides,
-  }
+function makeContext(overrides: Partial<import("../types/rooms").AgentContext> = {}) {
+  return makeTestContext({ currentRoom: "office", ...overrides })
 }
 
 describe("plans tool", () => {

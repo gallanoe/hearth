@@ -1,6 +1,7 @@
 import { test, expect, describe, beforeEach } from "bun:test"
 import { RoomRegistry } from "./registry"
-import type { Room, AgentContext } from "../types/rooms"
+import type { Room } from "../types/rooms"
+import { makeTestContext } from "../test-helpers"
 import { z } from "zod"
 
 function makeRoom(overrides: Partial<Room> & { id: string; name: string }): Room {
@@ -12,13 +13,8 @@ function makeRoom(overrides: Partial<Room> & { id: string; name: string }): Room
   }
 }
 
-function makeContext(currentRoom: string): AgentContext {
-  return {
-    currentRoom,
-    currentSession: 1,
-    budget: { total: 1_000_000, spent: 0, remaining: 1_000_000, warningThreshold: 200_000 },
-    signals: { requestedSleep: false, requestedMove: null },
-  }
+function makeContext(currentRoom: string) {
+  return makeTestContext({ currentRoom })
 }
 
 describe("RoomRegistry", () => {

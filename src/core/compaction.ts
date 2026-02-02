@@ -4,8 +4,8 @@ import { COMPACTION_TRIGGER, RECENT_MESSAGES_TO_KEEP } from "../config"
 /**
  * Check if compaction is needed based on current context size.
  */
-export function shouldCompact(inputTokens: number): boolean {
-  return inputTokens >= COMPACTION_TRIGGER
+export function shouldCompact(inputTokens: number, trigger?: number): boolean {
+  return inputTokens >= (trigger ?? COMPACTION_TRIGGER)
 }
 
 /**

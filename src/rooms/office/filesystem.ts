@@ -1,20 +1,15 @@
 /**
  * Filesystem tools for the office room.
  * Provides ls, read, write, edit, and find operations.
+ * All file operations go through context.workspace for environment isolation.
  */
 import { z } from "zod"
-import { readdir, stat, mkdir } from "node:fs/promises"
-import { dirname, join } from "node:path"
 import type { ExecutableTool, ToolResult } from "../../types/rooms"
 import {
-  resolvePath,
   truncateOutput,
   formatBytes,
-  formatDate,
   isBinaryFile,
-  getFileMetadata,
   OUTPUT_LIMITS,
-  WORKSPACE_ROOT,
 } from "./utils"
 
 /**
@@ -29,10 +24,10 @@ export const ls: ExecutableTool = {
       .optional()
       .describe("Directory path relative to workspace. Defaults to current directory."),
   }),
-  execute: async (params): Promise<ToolResult> => {
+  execute: async (params, context): Promise<ToolResult> => {
     try {
-      const targetPath = resolvePath((params.path as string) || ".")
-      const entries = await readdir(targetPath, { withFileTypes: true })
+      const targetPath = (params.path as string) || "."
+      const entries = await context.workspace.listDir(targetPath)
 
       if (entries.length === 0) {
         return {
@@ -41,20 +36,13 @@ export const ls: ExecutableTool = {
         }
       }
 
-      // Get stats for each entry
+      // Sort and format entries
       const lines: string[] = []
       for (const entry of entries.sort((a, b) => a.name.localeCompare(b.name))) {
-        const entryPath = join(targetPath, entry.name)
-        try {
-          const stats = await stat(entryPath)
-          if (entry.isDirectory()) {
-            lines.push(`${entry.name}/`)
-          } else {
-            lines.push(`${entry.name}  (${formatBytes(stats.size)})`)
-          }
-        } catch {
-          // If we can't stat, just show the name
-          lines.push(entry.name)
+        if (entry.isDirectory) {
+          lines.push(`${entry.name}/`)
+        } else {
+          lines.push(`${entry.name}  (${formatBytes(entry.size ?? 0)})`)
         }
       }
 
@@ -78,34 +66,35 @@ export const ls: ExecutableTool = {
 export const read: ExecutableTool = {
   name: "read",
   description: "Read a file's contents.",
+  persistResult: false,
   inputSchema: z.object({
     path: z.string().describe("File path relative to workspace."),
   }),
-  execute: async (params): Promise<ToolResult> => {
+  execute: async (params, context): Promise<ToolResult> => {
     try {
-      const filePath = resolvePath(params.path as string)
+      const filePath = params.path as string
 
       // Check if file exists
-      const file = Bun.file(filePath)
-      const exists = await file.exists()
-      if (!exists) {
+      const fileExists = await context.workspace.exists(filePath)
+      if (!fileExists) {
         return {
           success: false,
-          output: `File not found: ${params.path}`,
+          output: `File not found: ${filePath}`,
         }
       }
 
       // Handle binary files
       if (isBinaryFile(filePath)) {
-        const metadata = await getFileMetadata(filePath)
+        const stats = await context.workspace.stat(filePath)
+        const filename = filePath.split("/").pop() || filePath
         return {
           success: true,
-          output: metadata,
+          output: `Binary file: ${filename}\nSize: ${formatBytes(stats.size)}`,
         }
       }
 
       // Read text file
-      const content = await file.text()
+      const content = await context.workspace.readFile(filePath)
       const truncated = truncateOutput(content, OUTPUT_LIMITS.read)
 
       return {
@@ -128,26 +117,22 @@ export const read: ExecutableTool = {
 export const write: ExecutableTool = {
   name: "write",
   description: "Create or overwrite a file. Creates parent directories if needed.",
+  persistInput: false,
   inputSchema: z.object({
     path: z.string().describe("File path relative to workspace."),
     content: z.string().describe("Content to write to the file."),
   }),
-  execute: async (params): Promise<ToolResult> => {
+  execute: async (params, context): Promise<ToolResult> => {
     try {
-      const filePath = resolvePath(params.path as string)
+      const filePath = params.path as string
       const content = params.content as string
 
-      // Create parent directories if needed
-      const dir = dirname(filePath)
-      await mkdir(dir, { recursive: true })
-
-      // Write file
-      await Bun.write(filePath, content)
+      await context.workspace.writeFile(filePath, content)
       const bytes = Buffer.byteLength(content, "utf-8")
 
       return {
         success: true,
-        output: `Wrote ${formatBytes(bytes)} to ${params.path}`,
+        output: `Wrote ${formatBytes(bytes)} to ${filePath}`,
       }
     } catch (error) {
       const message = error instanceof Error ? error.message : "Unknown error"
@@ -164,6 +149,7 @@ export const write: ExecutableTool = {
  */
 export const edit: ExecutableTool = {
   name: "edit",
+  persistInput: false,
   description:
     "Edit a specific section of a file by replacing text. The old_text must appear exactly once in the file.",
   inputSchema: z.object({
@@ -171,24 +157,23 @@ export const edit: ExecutableTool = {
     old_text: z.string().describe("Text to find (must be unique in the file)."),
     new_text: z.string().describe("Replacement text."),
   }),
-  execute: async (params): Promise<ToolResult> => {
+  execute: async (params, context): Promise<ToolResult> => {
     try {
-      const filePath = resolvePath(params.path as string)
+      const filePath = params.path as string
       const oldText = params.old_text as string
       const newText = params.new_text as string
 
       // Check if file exists
-      const file = Bun.file(filePath)
-      const exists = await file.exists()
-      if (!exists) {
+      const fileExists = await context.workspace.exists(filePath)
+      if (!fileExists) {
         return {
           success: false,
-          output: `File not found: ${params.path}`,
+          output: `File not found: ${filePath}`,
         }
       }
 
       // Read current content
-      const content = await file.text()
+      const content = await context.workspace.readFile(filePath)
 
       // Count occurrences
       const occurrences = content.split(oldText).length - 1
@@ -209,7 +194,7 @@ export const edit: ExecutableTool = {
 
       // Perform replacement
       const newContent = content.replace(oldText, newText)
-      await Bun.write(filePath, newContent)
+      await context.workspace.writeFile(filePath, newContent)
 
       // Generate simple diff preview
       const oldPreview = oldText.slice(0, 100) + (oldText.length > 100 ? "..." : "")
@@ -217,7 +202,7 @@ export const edit: ExecutableTool = {
 
       return {
         success: true,
-        output: `Edited ${params.path}\n\n- ${oldPreview}\n+ ${newPreview}`,
+        output: `Edited ${filePath}\n\n- ${oldPreview}\n+ ${newPreview}`,
       }
     } catch (error) {
       const message = error instanceof Error ? error.message : "Unknown error"
@@ -246,30 +231,23 @@ export const find: ExecutableTool = {
       .optional()
       .describe("Directory to search in, relative to workspace. Defaults to workspace root."),
   }),
-  execute: async (params): Promise<ToolResult> => {
+  execute: async (params, context): Promise<ToolResult> => {
     try {
-      const searchPath = resolvePath((params.path as string) || ".")
+      const searchPath = (params.path as string) || "."
       const pattern = params.pattern as string
       const searchType = (params.type as string) || "name"
+      const workspaceRoot = context.workspace.root
 
       let command: string
       if (searchType === "content") {
-        // Use grep for content search
         command = `grep -r -l --include="*" "${pattern.replace(/"/g, '\\"')}" "${searchPath}" 2>/dev/null || true`
       } else {
-        // Use find for name search
         command = `find "${searchPath}" -name "${pattern.replace(/"/g, '\\"')}" -type f 2>/dev/null || true`
       }
 
-      const proc = Bun.spawn(["bash", "-c", command], {
-        cwd: WORKSPACE_ROOT,
-        timeout: 30_000,
-      })
+      const result = await context.workspace.exec(command, { timeout: 30_000 })
 
-      const stdout = await new Response(proc.stdout).text()
-      await proc.exited
-
-      if (!stdout.trim()) {
+      if (!result.stdout.trim()) {
         return {
           success: true,
           output: "No matches found.",
@@ -277,10 +255,10 @@ export const find: ExecutableTool = {
       }
 
       // Convert absolute paths to relative
-      const results = stdout
+      const results = result.stdout
         .trim()
         .split("\n")
-        .map((line) => line.replace(WORKSPACE_ROOT + "/", ""))
+        .map((line) => line.replace(workspaceRoot + "/", ""))
         .join("\n")
 
       return {

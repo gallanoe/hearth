@@ -1,5 +1,6 @@
 import type { LLMProvider, Message, ToolCall } from "../types/llm"
 import type { AgentContext, ToolResult } from "../types/rooms"
+import { LocalWorkspace, type Workspace } from "../workspace"
 import { roomRegistry } from "../rooms/registry"
 import { BudgetTracker, type BudgetConfig } from "./budget"
 import {
@@ -15,6 +16,7 @@ import { decayToolResults } from "./decay"
 import { sessionStore, type SessionStore } from "../data/sessions"
 import { memoryStore } from "../data/memories"
 import { planStore } from "../data/plans"
+import { WORKSPACE_ROOT } from "../config"
 
 /**
  * Configuration for running a session.
@@ -25,6 +27,8 @@ export interface SessionConfig {
   reflections: string[] // Relevant past reflections
   inboxCount: number
   previousSessionSummary: string | null // Summary of the previous session
+  agentId?: string // Defaults to "default"
+  workspace?: Workspace // Defaults to LocalWorkspace(WORKSPACE_ROOT)
 }
 
 /**
@@ -87,7 +91,10 @@ export async function runSession(
   }
 
   // Initialize agent context
+  const workspace = config.workspace ?? new LocalWorkspace(WORKSPACE_ROOT)
   const context: AgentContext = {
+    agentId: config.agentId ?? "default",
+    workspace,
     currentRoom: "bedroom",
     currentSession: config.sessionNumber,
     budget: budget.getState(),
@@ -211,7 +218,20 @@ export async function runSession(
         toolCalls: response.toolCalls,
       }
       messages.push(assistantMessage)
-      await persistMessage(assistantMessage, context.currentRoom, turnSequence)
+
+      // Redact tool call args for tools that opt out of input persistence
+      const redactedToolCalls = response.toolCalls.map((tc) => {
+        const t = roomRegistry.getExecutableTool(context.currentRoom, tc.name)
+        if (t?.persistInput === false) {
+          return { ...tc, args: { _redacted: true } }
+        }
+        return tc
+      })
+      await persistMessage(
+        { ...assistantMessage, toolCalls: redactedToolCalls },
+        context.currentRoom,
+        turnSequence
+      )
 
       // Execute each tool
       for (const toolCall of response.toolCalls) {
@@ -239,7 +259,17 @@ export async function runSession(
           decay: { turn: turnSequence, toolName: toolCall.name },
         }
         messages.push(toolResultMessage)
-        await persistMessage(toolResultMessage, context.currentRoom, turnSequence)
+
+        // Persist with redacted content if tool opts out of result persistence
+        if (tool?.persistResult === false) {
+          await persistMessage(
+            { ...toolResultMessage, content: `[${toolCall.name} result not persisted]` },
+            context.currentRoom,
+            turnSequence
+          )
+        } else {
+          await persistMessage(toolResultMessage, context.currentRoom, turnSequence)
+        }
 
         // Handle room state updates
         if (result.stateUpdate) {

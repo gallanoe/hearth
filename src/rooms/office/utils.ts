@@ -1,38 +1,10 @@
 /**
  * Shared utilities for office tools.
+ * Pure utility functions — no workspace or filesystem dependencies.
  */
-import { resolve, join } from "node:path"
-import { stat, mkdir } from "node:fs/promises"
-import { WORKSPACE_ROOT, OUTPUT_LIMITS, DEFAULT_TIMEOUT } from "../../config"
+import { OUTPUT_LIMITS, DEFAULT_TIMEOUT } from "../../config"
 
-export { WORKSPACE_ROOT, OUTPUT_LIMITS, DEFAULT_TIMEOUT }
-
-/**
- * Ensures the workspace directory exists.
- * Creates it if necessary.
- */
-export async function ensureWorkspaceExists(): Promise<void> {
-  await mkdir(WORKSPACE_ROOT, { recursive: true })
-}
-
-/**
- * Resolves a user-provided path to an absolute path within the workspace.
- * Throws if the resolved path would escape the workspace.
- */
-export function resolvePath(userPath: string): string {
-  // Handle empty or "." path
-  const normalizedPath = userPath?.trim() || "."
-  
-  // Resolve to absolute path relative to workspace
-  const resolved = resolve(WORKSPACE_ROOT, normalizedPath)
-  
-  // Security check: ensure we're still within workspace
-  if (!resolved.startsWith(WORKSPACE_ROOT)) {
-    throw new Error("Access denied: path outside workspace")
-  }
-  
-  return resolved
-}
+export { OUTPUT_LIMITS, DEFAULT_TIMEOUT }
 
 /**
  * Truncates output with a notice if it exceeds the limit.
@@ -41,7 +13,7 @@ export function truncateOutput(output: string, limit: number): string {
   if (output.length <= limit) {
     return output
   }
-  
+
   const truncated = output.slice(0, limit)
   return `${truncated}\n\n--- truncated (showing ${limit.toLocaleString()} of ${output.length.toLocaleString()} characters) ---`
 }
@@ -51,11 +23,11 @@ export function truncateOutput(output: string, limit: number): string {
  */
 export function formatBytes(bytes: number): string {
   if (bytes === 0) return "0 B"
-  
+
   const units = ["B", "KB", "MB", "GB"]
   const i = Math.floor(Math.log(bytes) / Math.log(1024))
   const value = bytes / Math.pow(1024, i)
-  
+
   return `${value.toFixed(i === 0 ? 0 : 1)} ${units[i]}`
 }
 
@@ -97,7 +69,7 @@ export function isBinaryFile(filePath: string): boolean {
  */
 export function getMimeType(filePath: string): string {
   const ext = filePath.toLowerCase().slice(filePath.lastIndexOf("."))
-  
+
   const mimeTypes: Record<string, string> = {
     // Images
     ".png": "image/png",
@@ -128,21 +100,6 @@ export function getMimeType(filePath: string): string {
     ".db": "application/x-sqlite3",
     ".sqlite": "application/x-sqlite3",
   }
-  
-  return mimeTypes[ext] || "application/octet-stream"
-}
 
-/**
- * Gets file metadata for binary file display.
- */
-export async function getFileMetadata(filePath: string): Promise<string> {
-  const stats = await stat(filePath)
-  const filename = filePath.split("/").pop() || filePath
-  const mimeType = getMimeType(filePath)
-  const modified = formatDate(stats.mtime)
-  
-  return `Binary file: ${filename}
-Type: ${mimeType}
-Size: ${formatBytes(stats.size)}
-Modified: ${modified}`
+  return mimeTypes[ext] || "application/octet-stream"
 }

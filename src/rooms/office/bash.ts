@@ -3,63 +3,51 @@
  */
 import { z } from "zod"
 import type { ExecutableTool, ToolResult } from "../../types/rooms"
-import { truncateOutput, OUTPUT_LIMITS, WORKSPACE_ROOT, DEFAULT_TIMEOUT } from "./utils"
+import { truncateOutput, OUTPUT_LIMITS, DEFAULT_TIMEOUT } from "./utils"
 
 /**
  * Execute a shell command.
  */
 export const bash: ExecutableTool = {
   name: "bash",
+  persistResult: false,
   description:
     "Execute a shell command in the workspace. Use for operations not covered by specific tools. Output is truncated at 10k characters—use head, tail, or redirect to file for large outputs.",
   inputSchema: z.object({
     command: z.string().describe("The command to execute."),
   }),
-  execute: async (params): Promise<ToolResult> => {
+  execute: async (params, context): Promise<ToolResult> => {
     const command = params.command as string
 
     try {
-      const proc = Bun.spawn(["bash", "-c", command], {
-        cwd: WORKSPACE_ROOT,
-        timeout: DEFAULT_TIMEOUT,
-        stderr: "pipe",
-        stdout: "pipe",
-      })
-
-      // Capture both stdout and stderr
-      const [stdout, stderr] = await Promise.all([
-        new Response(proc.stdout).text(),
-        new Response(proc.stderr).text(),
-      ])
-
-      const exitCode = await proc.exited
+      const result = await context.workspace.exec(command, { timeout: DEFAULT_TIMEOUT })
 
       // Combine output
       let output = ""
-      if (stdout) output += stdout
-      if (stderr) {
+      if (result.stdout) output += result.stdout
+      if (result.stderr) {
         if (output && !output.endsWith("\n")) output += "\n"
-        if (stderr.trim()) output += stderr
+        if (result.stderr.trim()) output += result.stderr
       }
 
       // Handle empty output
       if (!output.trim()) {
-        output = exitCode === 0 ? "(no output)" : `(no output, exit code: ${exitCode})`
+        output = result.exitCode === 0 ? "(no output)" : `(no output, exit code: ${result.exitCode})`
       }
 
       // Truncate if needed
       const truncated = truncateOutput(output.trim(), OUTPUT_LIMITS.bash)
 
       // Add exit code if non-zero and not already in output
-      if (exitCode !== 0 && !truncated.includes(`exit code: ${exitCode}`)) {
+      if (result.exitCode !== 0 && !truncated.includes(`exit code: ${result.exitCode}`)) {
         return {
           success: false,
-          output: `${truncated}\n\n(exit code: ${exitCode})`,
+          output: `${truncated}\n\n(exit code: ${result.exitCode})`,
         }
       }
 
       return {
-        success: exitCode === 0,
+        success: result.exitCode === 0,
         output: truncated,
       }
     } catch (error) {

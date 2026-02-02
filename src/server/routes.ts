@@ -236,7 +236,9 @@ function formatMessage(row: TranscriptRow): Record<string, unknown> {
  */
 function applyDecay(rows: TranscriptRow[]): Record<string, unknown>[] {
   // Determine the current turn from the last message's turn_sequence
+  if (rows.length === 0) return []
   const lastRow = rows[rows.length - 1]
+  if (!lastRow) return []
   const currentTurn = lastRow.turnSequence ?? 0
   const cutoff = currentTurn - DECAY_TURN_WINDOW
 

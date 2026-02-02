@@ -6,7 +6,6 @@ import type { Room } from "../../types/rooms"
 import { filesystemTools } from "./filesystem"
 import { bash } from "./bash"
 import { webTools } from "./web"
-import { WORKSPACE_ROOT, ensureWorkspaceExists } from "./utils"
 
 export const office: Room = {
   id: "office",
@@ -15,20 +14,19 @@ export const office: Room = {
     "A room with a desk and terminal. File system access, shell commands, and internet connectivity are available here.",
   tools: [...filesystemTools, bash, ...webTools],
   transitions: "*", // Can go anywhere from the office
-  onEnter: async () => {
-    // Ensure workspace directory exists
-    await ensureWorkspaceExists()
+  onEnter: async (context) => {
+    try {
+      const entries = await context.workspace.listDir(".")
+      const fileCount = entries.length
 
-    // Check if workspace has any files
-    const { readdir } = await import("node:fs/promises")
-    const entries = await readdir(WORKSPACE_ROOT)
-    const fileCount = entries.length
+      if (fileCount === 0) {
+        return "Workspace is empty."
+      }
 
-    if (fileCount === 0) {
+      const plural = fileCount === 1 ? "item" : "items"
+      return `${fileCount} ${plural} in workspace.`
+    } catch {
       return "Workspace is empty."
     }
-
-    const plural = fileCount === 1 ? "item" : "items"
-    return `${fileCount} ${plural} in workspace.`
   },
 }

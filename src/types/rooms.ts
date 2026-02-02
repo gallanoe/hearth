@@ -1,10 +1,13 @@
 import type { z } from "zod"
+import type { Workspace } from "../workspace/types"
 
 /**
  * Context passed to tool execution and room hooks.
  * This is the agent's "awareness" of its current state.
  */
 export interface AgentContext {
+  agentId: string
+  workspace: Workspace
   currentRoom: string
   currentSession: number
   budget: {
@@ -38,6 +41,10 @@ export interface ExecutableTool {
   description: string
   inputSchema: z.ZodObject<z.ZodRawShape>
   execute: (params: Record<string, unknown>, context: AgentContext) => Promise<ToolResult>
+  /** Whether to persist the tool call arguments to the database. Defaults to true. */
+  persistInput?: boolean
+  /** Whether to persist the tool result content to the database. Defaults to true. */
+  persistResult?: boolean
 }
 
 /**

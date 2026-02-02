@@ -50,6 +50,7 @@ function htmlToMarkdown(html: string, url: string): string {
 export const webSearch: ExecutableTool = {
   name: "web_search",
   description: "Search the web and return results with titles, URLs, and snippets.",
+  persistResult: false,
   inputSchema: z.object({
     query: z.string().describe("The search query."),
   }),
@@ -103,6 +104,7 @@ export const webSearch: ExecutableTool = {
  */
 export const fetchUrl: ExecutableTool = {
   name: "fetch",
+  persistResult: false,
   description:
     "Retrieve the contents of a URL. HTML is converted to Markdown for readability. Output is truncated at 50k characters.",
   inputSchema: z.object({

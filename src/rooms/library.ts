@@ -34,6 +34,7 @@ const listBooks: ExecutableTool = {
 const readBook: ExecutableTool = {
   name: "read_book",
   description: "Read a book from the collection. For longer books, specify a page number.",
+  persistResult: false,
   inputSchema: z.object({
     title: z.string().describe("The title of the book to read (case-insensitive)."),
     page: z.number().optional().describe("Page number to read (1-indexed). Omit to read from the beginning."),

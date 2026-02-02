@@ -1,14 +1,9 @@
 import { test, expect, describe } from "bun:test"
 import { remember, recall, forget } from "./memory"
-import type { AgentContext } from "../types/rooms"
+import { makeTestContext } from "../test-helpers"
 
-function makeContext(): AgentContext {
-  return {
-    currentRoom: "library",
-    currentSession: 1,
-    budget: { total: 1_000_000, spent: 0, remaining: 1_000_000, warningThreshold: 200_000 },
-    signals: { requestedSleep: false, requestedMove: null },
-  }
+function makeContext() {
+  return makeTestContext({ currentRoom: "library" })
 }
 
 describe("remember tool", () => {

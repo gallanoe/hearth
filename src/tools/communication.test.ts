@@ -7,13 +7,10 @@ import { letterStore } from "../data/letters"
 // We use a fresh LetterStore per describe block by importing the class directly.
 import { LetterStore } from "../data/letters"
 
+import { makeTestContext } from "../test-helpers"
+
 function makeContext() {
-  return {
-    currentRoom: "entryway",
-    currentSession: 1,
-    budget: { total: 1_000_000, spent: 0, remaining: 1_000_000, warningThreshold: 200_000 },
-    signals: { requestedSleep: false, requestedMove: null },
-  }
+  return makeTestContext({ currentRoom: "entryway" })
 }
 
 describe("readInbox tool", () => {

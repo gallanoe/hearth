@@ -1,7 +1,10 @@
 import { test, expect, describe } from "bun:test"
-import { decayToolResults } from "./decay"
+import { decayToolResults, type DecayConfig } from "./decay"
 import { DECAY_TURN_WINDOW, DECAY_STUB_THRESHOLD } from "../config"
 import type { Message } from "../types/llm"
+
+/** Test-specific config matching original test assumptions. */
+const TEST_DECAY: DecayConfig = { turnWindow: 1, stubThreshold: 500 }
 
 /** Helper to create a tool result message with decay metadata. */
 function toolMsg(content: string, turn: number, toolName = "read_book"): Message {
@@ -26,7 +29,7 @@ describe("decayToolResults", () => {
       toolMsg(longContent(800), 2),
     ]
 
-    decayToolResults(messages, 3)
+    decayToolResults(messages, 3, TEST_DECAY)
 
     // Turn 1 is older than cutoff (3 - 1 = 2), should be stubbed
     expect(messages[0].content).toBe("[read_book(): returned 1000 chars]")
@@ -40,7 +43,7 @@ describe("decayToolResults", () => {
       toolMsg(original, 3),
     ]
 
-    decayToolResults(messages, 3)
+    decayToolResults(messages, 3, TEST_DECAY)
 
     // Turn 3 is the current turn, within window — content unchanged
     expect(messages[0].content).toBe(original)
@@ -52,7 +55,7 @@ describe("decayToolResults", () => {
       toolMsg(shortContent, 1),
     ]
 
-    decayToolResults(messages, 5)
+    decayToolResults(messages, 5, TEST_DECAY)
 
     // Content is below DECAY_STUB_THRESHOLD, should be untouched
     expect(messages[0].content).toBe(shortContent)
@@ -66,7 +69,7 @@ describe("decayToolResults", () => {
     ]
 
     const originals = messages.map((m) => m.content)
-    decayToolResults(messages, 10)
+    decayToolResults(messages, 10, TEST_DECAY)
 
     messages.forEach((m, i) => {
       expect(m.content).toBe(originals[i])
@@ -79,7 +82,7 @@ describe("decayToolResults", () => {
       { role: "tool", content, toolCallId: "call_1" },
     ]
 
-    decayToolResults(messages, 10)
+    decayToolResults(messages, 10, TEST_DECAY)
 
     expect(messages[0].content).toBe(content)
   })
@@ -90,7 +93,7 @@ describe("decayToolResults", () => {
     ]
     const ref = messages[0]
 
-    decayToolResults(messages, 5)
+    decayToolResults(messages, 5, TEST_DECAY)
 
     // Same object reference, mutated in place
     expect(messages[0]).toBe(ref)
@@ -107,7 +110,7 @@ describe("decayToolResults", () => {
       toolMsg(longContent(1500), 3, "read_book"),     // current → keep
     ]
 
-    decayToolResults(messages, 3)
+    decayToolResults(messages, 3, TEST_DECAY)
 
     expect(messages[0].content).toBe("[fetch(): returned 1000 chars]")
     expect(messages[2].content).toBe("ok")
@@ -121,12 +124,12 @@ describe("decayToolResults", () => {
     ]
 
     // Should not throw
-    decayToolResults(messages, 5)
+    decayToolResults(messages, 5, TEST_DECAY)
     expect(messages[0].content).toBeNull()
   })
 
   test("config constants have expected defaults", () => {
-    expect(DECAY_TURN_WINDOW).toBe(1)
+    expect(DECAY_TURN_WINDOW).toBe(5)
     expect(DECAY_STUB_THRESHOLD).toBe(500)
   })
 
@@ -136,7 +139,7 @@ describe("decayToolResults", () => {
       toolMsg(exact, 1),
     ]
 
-    decayToolResults(messages, 5)
+    decayToolResults(messages, 5, TEST_DECAY)
 
     // length === threshold, not > threshold, so it stays
     expect(messages[0].content).toBe(exact)

@@ -1,48 +1,11 @@
 import { test, expect, describe } from "bun:test"
 import {
-  resolvePath,
   truncateOutput,
   formatBytes,
   formatDate,
   isBinaryFile,
   getMimeType,
-  WORKSPACE_ROOT,
 } from "./utils"
-
-describe("resolvePath", () => {
-  test("resolves relative path within workspace", () => {
-    const result = resolvePath("notes.txt")
-    expect(result).toBe(`${WORKSPACE_ROOT}/notes.txt`)
-  })
-
-  test("resolves nested path within workspace", () => {
-    const result = resolvePath("subdir/file.txt")
-    expect(result).toBe(`${WORKSPACE_ROOT}/subdir/file.txt`)
-  })
-
-  test("resolves '.' to workspace root", () => {
-    const result = resolvePath(".")
-    expect(result).toBe(WORKSPACE_ROOT)
-  })
-
-  test("resolves empty string to workspace root", () => {
-    const result = resolvePath("")
-    expect(result).toBe(WORKSPACE_ROOT)
-  })
-
-  test("resolves whitespace-only to workspace root", () => {
-    const result = resolvePath("   ")
-    expect(result).toBe(WORKSPACE_ROOT)
-  })
-
-  test("throws on path traversal outside workspace", () => {
-    expect(() => resolvePath("../../etc/passwd")).toThrow("Access denied: path outside workspace")
-  })
-
-  test("throws on absolute path outside workspace", () => {
-    expect(() => resolvePath("/etc/passwd")).toThrow("Access denied: path outside workspace")
-  })
-})
 
 describe("truncateOutput", () => {
   test("returns content unchanged when under limit", () => {

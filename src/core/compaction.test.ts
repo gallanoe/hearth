@@ -14,21 +14,23 @@ import type { Message, LLMProvider, LLMResponse, ToolDefinition } from "../types
 
 describe("compaction", () => {
   describe("shouldCompact", () => {
+    const TEST_TRIGGER = 180_000
+
     test("returns false when below threshold", () => {
-      expect(shouldCompact(100_000)).toBe(false)
-      expect(shouldCompact(170_000)).toBe(false)
+      expect(shouldCompact(100_000, TEST_TRIGGER)).toBe(false)
+      expect(shouldCompact(170_000, TEST_TRIGGER)).toBe(false)
     })
 
     test("returns true when at or above threshold", () => {
-      expect(shouldCompact(COMPACTION_TRIGGER)).toBe(true)
-      expect(shouldCompact(180_000)).toBe(true)
-      expect(shouldCompact(200_000)).toBe(true)
+      expect(shouldCompact(TEST_TRIGGER, TEST_TRIGGER)).toBe(true)
+      expect(shouldCompact(180_000, TEST_TRIGGER)).toBe(true)
+      expect(shouldCompact(200_000, TEST_TRIGGER)).toBe(true)
     })
 
     test("threshold is 90% of context window", () => {
       expect(COMPACTION_THRESHOLD).toBe(0.9)
       expect(COMPACTION_TRIGGER).toBe(CONTEXT_WINDOW * 0.9)
-      expect(COMPACTION_TRIGGER).toBe(180_000)
+      expect(COMPACTION_TRIGGER).toBe(90_000)
     })
   })
 

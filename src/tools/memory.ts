@@ -1,6 +1,5 @@
 import { z } from "zod"
 import type { ExecutableTool, ToolResult } from "../types/rooms"
-import { memoryStore } from "../data/memories"
 import { formatRelativeTime } from "../data/letters"
 
 export const remember: ExecutableTool = {
@@ -24,7 +23,7 @@ export const remember: ExecutableTool = {
     const content = params.content as string
     const tags = (params.tags as string[] | undefined) ?? []
 
-    const memory = await memoryStore.add(content, tags, context.currentSession, context.currentRoom)
+    const memory = await context.stores.memories.add(content, tags, context.currentSession, context.currentRoom)
 
     return {
       success: true,
@@ -47,12 +46,12 @@ export const recall: ExecutableTool = {
       ),
     limit: z.number().optional().describe("Max results to return. Default: 5."),
   }),
-  execute: async (params): Promise<ToolResult> => {
+  execute: async (params, context): Promise<ToolResult> => {
     const query = params.query as string
     const scope = (params.scope as "memories" | "sessions" | "all" | undefined) ?? "all"
     const limit = (params.limit as number | undefined) ?? 5
 
-    const results = await memoryStore.search(query, scope, limit)
+    const results = await context.stores.memories.search(query, scope, limit)
 
     if (results.length === 0) {
       return {
@@ -85,10 +84,10 @@ export const forget: ExecutableTool = {
   inputSchema: z.object({
     memoryId: z.number().describe("The memory ID to remove (from recall results)."),
   }),
-  execute: async (params): Promise<ToolResult> => {
+  execute: async (params, context): Promise<ToolResult> => {
     const memoryId = params.memoryId as number
 
-    const removed = await memoryStore.remove(memoryId)
+    const removed = await context.stores.memories.remove(memoryId)
 
     if (removed) {
       return {

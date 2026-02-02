@@ -1,16 +1,14 @@
 import { z } from "zod"
 import type { Room, ExecutableTool, ToolResult } from "../types/rooms"
-import { bookStore, paginateContent } from "../data/books"
-import { reflectionStore } from "../data/reflections"
-import { memoryStore } from "../data/memories"
+import { paginateContent } from "../data/books"
 import { getRandomWindowEvent } from "../data/window-events"
 
 const listBooks: ExecutableTool = {
   name: "list_books",
   description: "See what books are available on the shelves.",
   inputSchema: z.object({}),
-  execute: async (): Promise<ToolResult> => {
-    const titles = bookStore.getTitles()
+  execute: async (_params, context): Promise<ToolResult> => {
+    const titles = context.stores.books.getTitles()
 
     if (titles.length === 0) {
       return {
@@ -39,13 +37,13 @@ const readBook: ExecutableTool = {
     title: z.string().describe("The title of the book to read (case-insensitive)."),
     page: z.number().optional().describe("Page number to read (1-indexed). Omit to read from the beginning."),
   }),
-  execute: async (params): Promise<ToolResult> => {
+  execute: async (params, context): Promise<ToolResult> => {
     const title = params.title as string
     const page = params.page as number | undefined
-    const book = bookStore.get(title)
+    const book = context.stores.books.get(title)
 
     if (!book) {
-      const available = bookStore.getTitles()
+      const available = context.stores.books.getTitles()
       if (available.length === 0) {
         return {
           success: false,
@@ -88,10 +86,10 @@ const meditate: ExecutableTool = {
     const thoughts = params.thoughts as string
 
     // Store the reflection for future retrieval
-    reflectionStore.add(thoughts, context.currentSession)
+    context.stores.reflections.add(thoughts, context.currentSession)
 
     // Also persist to long-term memory for cross-session search
-    await memoryStore.add(thoughts, ["reflection", "meditation"], context.currentSession, context.currentRoom)
+    await context.stores.memories.add(thoughts, ["reflection", "meditation"], context.currentSession, context.currentRoom)
 
     console.log(`💭 Reflected on: ${thoughts}`)
 
@@ -116,17 +114,12 @@ const lookOutside: ExecutableTool = {
   },
 }
 
+// Note: Library description is now static since bookStore is no longer a module-level singleton.
+// The dynamic count can be added back via onEnter or by passing bookStore to a factory function.
 export const library: Room = {
   id: "library",
   name: "Library",
-  description: () => {
-    const bookCount = bookStore.getCount()
-    if (bookCount === 0) {
-      return "A room with empty bookshelves and a window. Reading and reflection tools available."
-    }
-    const plural = bookCount === 1 ? "book" : "books"
-    return `A room with bookshelves (${bookCount} ${plural}) and a window. Reading and reflection tools available.`
-  },
+  description: "A room with bookshelves and a window. Reading and reflection tools available.",
   tools: [listBooks, readBook],
   transitions: "*", // Can go anywhere from the library
 }

@@ -1,6 +1,6 @@
 import type { SessionResult } from "../core/loop"
-import { letterStore } from "../data/letters"
-import { sessionStore, type TranscriptRow } from "../data/sessions"
+import type { AgentStores } from "../types/rooms"
+import type { TranscriptRow } from "../data/sessions"
 import { DECAY_TURN_WINDOW, DECAY_STUB_THRESHOLD } from "../config"
 
 /**
@@ -10,11 +10,14 @@ import { DECAY_TURN_WINDOW, DECAY_STUB_THRESHOLD } from "../config"
 export function createRoutes(state: {
   isRunning: () => boolean
   lastResult: () => SessionResult | null
+  stores: AgentStores
 }) {
+  const { stores } = state
+
   return {
     "/api/status": {
       GET: async () => {
-        const sessions = await sessionStore.listSessions()
+        const sessions = await stores.sessions.listSessions()
         const latestSession = sessions[0] ?? null
         const currentSession = latestSession?.sessionId ?? 0
         const last = state.lastResult()
@@ -43,7 +46,7 @@ export function createRoutes(state: {
 
     "/api/inbox": {
       GET: () => {
-        const letters = letterStore.getInbox().map((l) => ({
+        const letters = stores.letters.getInbox().map((l) => ({
           id: l.id,
           content: l.content,
           sentAt: l.sentAt.toISOString(),
@@ -56,7 +59,7 @@ export function createRoutes(state: {
         if (!body.content || body.content.trim().length === 0) {
           return Response.json({ error: "Content is required" }, { status: 400 })
         }
-        const letter = letterStore.addInbound(body.content.trim())
+        const letter = stores.letters.addInbound(body.content.trim())
         return Response.json({
           id: letter.id,
           sentAt: letter.sentAt.toISOString(),
@@ -66,7 +69,7 @@ export function createRoutes(state: {
 
     "/api/outbox": {
       GET: () => {
-        const letters = letterStore.getOutbox().map((l) => ({
+        const letters = stores.letters.getOutbox().map((l) => ({
           id: l.id,
           content: l.content,
           sentAt: l.sentAt.toISOString(),
@@ -78,7 +81,7 @@ export function createRoutes(state: {
 
     "/api/outbox/:id/pickup": {
       POST: (req: Request & { params: { id: string } }) => {
-        const letter = letterStore.markOutboundPickedUp(req.params.id)
+        const letter = stores.letters.markOutboundPickedUp(req.params.id)
         if (!letter) {
           return Response.json({ error: "Letter not found" }, { status: 404 })
         }
@@ -91,7 +94,7 @@ export function createRoutes(state: {
 
     "/api/sessions": {
       GET: async () => {
-        const sessions = await sessionStore.listSessions()
+        const sessions = await stores.sessions.listSessions()
         return Response.json({
           sessions: sessions.map((s) => ({
             id: s.sessionId,
@@ -112,12 +115,12 @@ export function createRoutes(state: {
           return Response.json({ error: "Invalid session ID" }, { status: 400 })
         }
 
-        const sessionInfo = await sessionStore.getSessionInfo(sessionId)
+        const sessionInfo = await stores.sessions.getSessionInfo(sessionId)
         if (!sessionInfo) {
           return Response.json({ error: "Session not found" }, { status: 404 })
         }
 
-        const transcript = await sessionStore.getFullTranscript(sessionId)
+        const transcript = await stores.sessions.getFullTranscript(sessionId)
 
         return Response.json({
           id: sessionInfo.sessionId,
@@ -157,15 +160,15 @@ export function createRoutes(state: {
           return Response.json({ error: "Invalid view parameter. Use 'context' or 'raw'" }, { status: 400 })
         }
 
-        const sessionInfo = await sessionStore.getSessionInfo(sessionId)
+        const sessionInfo = await stores.sessions.getSessionInfo(sessionId)
         if (!sessionInfo) {
           return Response.json({ error: "Session not found" }, { status: 404 })
         }
 
         const rows =
           view === "context"
-            ? await sessionStore.getContextUpTo(sessionId, messageId)
-            : await sessionStore.getRawTranscriptUpTo(sessionId, messageId)
+            ? await stores.sessions.getContextUpTo(sessionId, messageId)
+            : await stores.sessions.getRawTranscriptUpTo(sessionId, messageId)
 
         if (rows.length === 0) {
           return Response.json({ error: "Message not found in session" }, { status: 404 })

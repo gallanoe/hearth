@@ -1,12 +1,5 @@
-import { test, expect, describe, beforeEach } from "bun:test"
+import { test, expect, describe } from "bun:test"
 import { readInbox, sendMessage } from "./communication"
-import { letterStore } from "../data/letters"
-
-// The letterStore is a singleton — we need to work with its current state.
-// Since LetterStore has no clearAll(), we test by adding fresh letters each time.
-// We use a fresh LetterStore per describe block by importing the class directly.
-import { LetterStore } from "../data/letters"
-
 import { makeTestContext } from "../test-helpers"
 
 function makeContext() {
@@ -19,10 +12,9 @@ describe("readInbox tool", () => {
   })
 
   test("returns empty message when no unread letters", async () => {
-    // The singleton may have letters from other tests, but we test the tool's format
     const result = await readInbox.execute({}, makeContext())
     expect(result.success).toBe(true)
-    // Either "empty" or contains letter content — both are valid successes
+    expect(result.output).toContain("empty")
   })
 })
 

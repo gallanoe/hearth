@@ -1,7 +1,7 @@
 import type { LLMProvider, Message, ToolCall } from "../types/llm"
-import type { AgentContext, ToolResult } from "../types/rooms"
+import type { AgentContext, AgentStores, ToolResult } from "../types/rooms"
 import { LocalWorkspace, type Workspace } from "../workspace"
-import { roomRegistry } from "../rooms/registry"
+import type { RoomRegistry } from "../rooms/registry"
 import { BudgetTracker, type BudgetConfig } from "./budget"
 import {
   buildSystemPrompt,
@@ -10,12 +10,8 @@ import {
   type WakeUpContext,
   type TurnNotifications,
 } from "./context"
-import { letterStore } from "../data/letters"
 import { shouldCompact, compactMessages } from "./compaction"
 import { decayToolResults } from "./decay"
-import { sessionStore, type SessionStore } from "../data/sessions"
-import { memoryStore } from "../data/memories"
-import { planStore } from "../data/plans"
 import { WORKSPACE_ROOT } from "../config"
 
 /**
@@ -61,19 +57,21 @@ export interface TurnRecord {
  * Runs a single session in the agent's life.
  * @param llm - The LLM provider to use
  * @param config - Session configuration
- * @param store - Optional session store for persistence (defaults to singleton)
+ * @param stores - All agent stores (per-agent instances)
+ * @param registry - Room registry
  */
 export async function runSession(
   llm: LLMProvider,
   config: SessionConfig,
-  store: SessionStore = sessionStore
+  stores: AgentStores,
+  registry: RoomRegistry
 ): Promise<SessionResult> {
   const budget = new BudgetTracker(config.budget)
   const turns: TurnRecord[] = []
   let turnSequence = 0
 
   // Create session in database
-  const sessionId = await store.createSession(config.sessionNumber)
+  const sessionId = await stores.sessions.createSession(config.sessionNumber)
 
   // Track message sequence numbers for compaction (maps in-memory index to DB sequence)
   // We'll track the DB sequence numbers as we append messages
@@ -82,7 +80,7 @@ export async function runSession(
   // Helper to persist a message (fire-and-forget, logs errors but doesn't throw)
   const persistMessage = async (message: Message, room: string, turnSeq?: number): Promise<void> => {
     try {
-      const msgId = await store.appendMessage(sessionId, message, room, turnSeq)
+      const msgId = await stores.sessions.appendMessage(sessionId, message, room, turnSeq)
       // Track the sequence number (it's the length of persisted messages)
       messageSequences.push(messageSequences.length + 1)
     } catch (error) {
@@ -95,6 +93,7 @@ export async function runSession(
   const context: AgentContext = {
     agentId: config.agentId ?? "default",
     workspace,
+    stores,
     currentRoom: "bedroom",
     currentSession: config.sessionNumber,
     budget: budget.getState(),
@@ -107,10 +106,10 @@ export async function runSession(
   let messages: Message[] = []
 
   // Wake up message
-  const startRoom = roomRegistry.get("bedroom")!
-  const memoryCount = await memoryStore.getCount()
-  const openPlanCount = await planStore.getOpenCount()
-  const activePlan = await planStore.getActive()
+  const startRoom = registry.get("bedroom")!
+  const memoryCount = await stores.memories.getCount()
+  const openPlanCount = await stores.plans.getOpenCount()
+  const activePlan = await stores.plans.getActive()
   const wakeUpContext: WakeUpContext = {
     session: config.sessionNumber,
     budget: budget.getState(),
@@ -125,7 +124,7 @@ export async function runSession(
 
   const wakeUpMessage: Message = {
     role: "user",
-    content: buildWakeUpMessage(wakeUpContext),
+    content: buildWakeUpMessage(wakeUpContext, stores.decorations),
   }
   messages.push(wakeUpMessage)
   await persistMessage(wakeUpMessage, context.currentRoom)
@@ -138,10 +137,10 @@ export async function runSession(
     turnSequence++
 
     // Get available tools for current room
-    const tools = roomRegistry.getToolDefinitions(context.currentRoom)
+    const tools = registry.getToolDefinitions(context.currentRoom)
 
     // Build system prompt with current budget state (refreshed each turn)
-    const systemPrompt = buildSystemPrompt(budget.getState())
+    const systemPrompt = buildSystemPrompt(budget.getState(), stores.persona)
 
     // Call LLM
     const response = await llm.send(systemPrompt, messages, tools)
@@ -162,7 +161,7 @@ export async function runSession(
         const rangeEndSeq = messageSequences[result.compactedRange.endIndex] ?? messageSequences.length
         
         try {
-          await store.recordCompaction(
+          await stores.sessions.recordCompaction(
             sessionId,
             rangeStartSeq,
             rangeEndSeq,
@@ -221,7 +220,7 @@ export async function runSession(
 
       // Redact tool call args for tools that opt out of input persistence
       const redactedToolCalls = response.toolCalls.map((tc) => {
-        const t = roomRegistry.getExecutableTool(context.currentRoom, tc.name)
+        const t = registry.getExecutableTool(context.currentRoom, tc.name)
         if (t?.persistInput === false) {
           return { ...tc, args: { _redacted: true } }
         }
@@ -235,7 +234,7 @@ export async function runSession(
 
       // Execute each tool
       for (const toolCall of response.toolCalls) {
-        const tool = roomRegistry.getExecutableTool(context.currentRoom, toolCall.name)
+        const tool = registry.getExecutableTool(context.currentRoom, toolCall.name)
 
         let result: ToolResult
         if (!tool) {
@@ -273,7 +272,7 @@ export async function runSession(
 
         // Handle room state updates
         if (result.stateUpdate) {
-          roomRegistry.updateRoomState(context.currentRoom, result.stateUpdate)
+          registry.updateRoomState(context.currentRoom, result.stateUpdate)
         }
       }
 
@@ -286,17 +285,17 @@ export async function runSession(
         context.signals.requestedMove = null
 
         // Execute onExit for current room
-        await roomRegistry.executeOnExit(context.currentRoom, context)
+        await registry.executeOnExit(context.currentRoom, context)
 
         // Move to new room
         context.currentRoom = targetRoom
-        console.log(`\n📍 ${roomRegistry.get(targetRoom)?.name ?? targetRoom}`)
+        console.log(`\n📍 ${registry.get(targetRoom)?.name ?? targetRoom}`)
 
         // Execute onEnter for new room
-        const enterMessage = await roomRegistry.executeOnEnter(targetRoom, context)
+        const enterMessage = await registry.executeOnEnter(targetRoom, context)
 
         // Store room entry for notification (instead of immediate message)
-        const newRoom = roomRegistry.get(targetRoom)!
+        const newRoom = registry.get(targetRoom)!
         notifications.roomEntry = {
           room: newRoom,
           enterMessage: typeof enterMessage === "string" ? enterMessage : undefined,
@@ -315,13 +314,13 @@ export async function runSession(
       }
 
       // Check for unread inbox
-      const inboxCount = letterStore.getUnreadCount()
+      const inboxCount = stores.letters.getUnreadCount()
       if (inboxCount > 0) {
         notifications.inboxCount = inboxCount
       }
 
       // Build prompt with optional notifications (always add a user message after tool calls)
-      const notificationContent = buildNotificationMessage(notifications)
+      const notificationContent = buildNotificationMessage(notifications, stores.decorations)
       if (notificationContent) {
         const promptContent = `You have received the following notifications: ${notificationContent}`
         const promptMessage: Message = {
@@ -356,13 +355,13 @@ export async function runSession(
       }
 
       // Check for unread inbox
-      const inboxCount = letterStore.getUnreadCount()
+      const inboxCount = stores.letters.getUnreadCount()
       if (inboxCount > 0) {
         notifications.inboxCount = inboxCount
       }
 
       // Build prompt with optional notifications
-      const notificationContent = buildNotificationMessage(notifications)
+      const notificationContent = buildNotificationMessage(notifications, stores.decorations)
       const promptContent = notificationContent
         ? `${notificationContent}\n\nWhat would you like to do?`
         : "What would you like to do?"
@@ -389,7 +388,7 @@ export async function runSession(
 
     // Record turn in database
     try {
-      await store.recordTurn(sessionId, turn)
+      await stores.sessions.recordTurn(sessionId, turn)
     } catch (error) {
       console.error("Failed to record turn:", error)
     }
@@ -417,7 +416,7 @@ export async function runSession(
   // End session in database
   const finalState = budget.getState()
   try {
-    await store.endSession(
+    await stores.sessions.endSession(
       sessionId,
       endReason,
       finalState.spent,

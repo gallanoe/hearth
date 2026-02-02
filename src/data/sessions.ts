@@ -42,6 +42,8 @@ export class SessionStore {
   // Sequence counter per session for assigning message sequence numbers
   private sequenceCounters: Map<number, number> = new Map()
 
+  constructor(private agentId: string = 'default') {}
+
   /**
    * Create a new session and return its ID.
    */
@@ -53,8 +55,8 @@ export class SessionStore {
 
     try {
       const [row] = await sql`
-        INSERT INTO sessions (metadata)
-        VALUES (${JSON.stringify({ sessionNumber })})
+        INSERT INTO sessions (agent_id, metadata)
+        VALUES (${this.agentId}, ${JSON.stringify({ sessionNumber })})
         RETURNING session_id
       `
       const sessionId = row.session_id as number
@@ -87,7 +89,7 @@ export class SessionStore {
           total_tokens_used = ${totalTokensUsed},
           session_summary = ${sessionSummary},
           metadata = COALESCE(metadata, '{}'::jsonb) || ${JSON.stringify({ totalCost: totalCost ?? 0 })}::jsonb
-        WHERE session_id = ${sessionId}
+        WHERE session_id = ${sessionId} AND agent_id = ${this.agentId}
       `
     } catch (error) {
       console.error("SessionStore.endSession failed:", error)
@@ -117,6 +119,7 @@ export class SessionStore {
 
       const [row] = await sql`
         INSERT INTO messages (
+          agent_id,
           session_id,
           sequence_num,
           role,
@@ -128,6 +131,7 @@ export class SessionStore {
           token_count
         )
         VALUES (
+          ${this.agentId},
           ${sessionId},
           ${nextSeq},
           ${message.role},
@@ -172,6 +176,7 @@ export class SessionStore {
         // 1. Insert compaction_events row
         const [compactionRow] = await tx`
           INSERT INTO compaction_events (
+            agent_id,
             session_id,
             range_start_seq,
             range_end_seq,
@@ -180,6 +185,7 @@ export class SessionStore {
             model_used
           )
           VALUES (
+            ${this.agentId},
             ${sessionId},
             ${rangeStartSeq},
             ${rangeEndSeq},
@@ -210,6 +216,7 @@ export class SessionStore {
 
         const [messageRow] = await tx`
           INSERT INTO messages (
+            agent_id,
             session_id,
             sequence_num,
             role,
@@ -218,6 +225,7 @@ export class SessionStore {
             token_count
           )
           VALUES (
+            ${this.agentId},
             ${sessionId},
             ${nextSeq},
             'user',
@@ -239,12 +247,14 @@ export class SessionStore {
         // 5. Insert into compaction_summaries
         await tx`
           INSERT INTO compaction_summaries (
+            agent_id,
             compaction_id,
             message_id,
             summary_text,
             depth
           )
           VALUES (
+            ${this.agentId},
             ${compactionId},
             ${summaryMessageId},
             ${summaryText},
@@ -266,6 +276,7 @@ export class SessionStore {
     try {
       await sql`
         INSERT INTO turns (
+          agent_id,
           session_id,
           sequence,
           room,
@@ -277,6 +288,7 @@ export class SessionStore {
           tool_results
         )
         VALUES (
+          ${this.agentId},
           ${sessionId},
           ${turn.sequence},
           ${turn.room},
@@ -378,7 +390,7 @@ export class SessionStore {
       const [row] = await sql`
         SELECT session_summary
         FROM sessions
-        WHERE ended_at IS NOT NULL
+        WHERE ended_at IS NOT NULL AND agent_id = ${this.agentId}
         ORDER BY ended_at DESC
         LIMIT 1
       `
@@ -405,7 +417,7 @@ export class SessionStore {
           total_tokens_used,
           session_summary
         FROM sessions
-        WHERE session_id = ${sessionId}
+        WHERE session_id = ${sessionId} AND agent_id = ${this.agentId}
       `
 
       if (!row) return null
@@ -434,6 +446,7 @@ export class SessionStore {
       const [row] = await sql`
         SELECT COALESCE(MAX(session_id), 0) + 1 as next_session
         FROM sessions
+        WHERE agent_id = ${this.agentId}
       `
       return row.next_session as number
     } catch (error) {
@@ -458,6 +471,7 @@ export class SessionStore {
           total_tokens_used,
           session_summary
         FROM sessions
+        WHERE agent_id = ${this.agentId}
         ORDER BY session_id DESC
       `
 
@@ -581,7 +595,3 @@ export class SessionStore {
   }
 }
 
-/**
- * Singleton instance of the session store.
- */
-export const sessionStore = new SessionStore()

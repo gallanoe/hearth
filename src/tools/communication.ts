@@ -1,6 +1,6 @@
 import { z } from "zod"
 import type { ExecutableTool, ToolResult } from "../types/rooms"
-import { letterStore, formatRelativeTime, formatDate } from "../data/letters"
+import { formatRelativeTime, formatDate } from "../data/letters"
 
 /**
  * Read all letters from the outside.
@@ -10,8 +10,8 @@ export const readInbox: ExecutableTool = {
   description:
     "Read all letters from the outside. Marks them as read. Returns letter contents with timestamps.",
   inputSchema: z.object({}),
-  execute: async (): Promise<ToolResult> => {
-    const letters = letterStore.getUnreadInbound()
+  execute: async (_params, context): Promise<ToolResult> => {
+    const letters = context.stores.letters.getUnreadInbound()
 
     if (letters.length === 0) {
       return {
@@ -21,7 +21,7 @@ export const readInbox: ExecutableTool = {
     }
 
     // Mark all as read
-    letterStore.markAsRead(letters.map((l) => l.id))
+    context.stores.letters.markAsRead(letters.map((l) => l.id))
 
     // Format output
     const plural = letters.length === 1 ? "letter" : "letters"
@@ -54,7 +54,7 @@ export const sendMessage: ExecutableTool = {
   inputSchema: z.object({
     content: z.string().describe("The content of your letter to send."),
   }),
-  execute: async (params): Promise<ToolResult> => {
+  execute: async (params, context): Promise<ToolResult> => {
     const content = params.content as string
 
     if (!content || content.trim().length === 0) {
@@ -64,7 +64,7 @@ export const sendMessage: ExecutableTool = {
       }
     }
 
-    letterStore.addOutbound(content.trim())
+    context.stores.letters.addOutbound(content.trim())
 
     return {
       success: true,

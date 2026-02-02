@@ -55,6 +55,8 @@ export class MemoryStore {
   private fallback: InMemoryEntry[] = []
   private nextFallbackId = 1
 
+  constructor(private agentId: string = 'default') {}
+
   /**
    * Store a new memory.
    */
@@ -85,8 +87,8 @@ export class MemoryStore {
     try {
       const pgTags = toPgArray(tags)
       const [row] = await sql`
-        INSERT INTO memories (content, tags, session_id, room)
-        VALUES (${content}, ${pgTags}::text[], ${sessionId}, ${room})
+        INSERT INTO memories (agent_id, content, tags, session_id, room)
+        VALUES (${this.agentId}, ${content}, ${pgTags}::text[], ${sessionId}, ${room})
         RETURNING memory_id, content, tags, session_id, room, access_count, created_at
       `
       return {
@@ -145,6 +147,7 @@ export class MemoryStore {
           SELECT memory_id, content, tags, session_id, room, access_count, created_at
           FROM memories
           WHERE deleted_at IS NULL
+            AND agent_id = ${this.agentId}
             AND (
               to_tsvector('english', content) @@ plainto_tsquery('english', ${query})
               OR EXISTS (
@@ -196,6 +199,7 @@ export class MemoryStore {
               SELECT session_summary AS content, started_at AS created_at
               FROM sessions
               WHERE session_summary IS NOT NULL
+                AND agent_id = ${this.agentId}
                 AND to_tsvector('english', session_summary) @@ plainto_tsquery('english', ${query})
               ORDER BY started_at DESC
               LIMIT ${remaining}
@@ -204,7 +208,8 @@ export class MemoryStore {
             (
               SELECT summary_text AS content, created_at
               FROM compaction_summaries
-              WHERE to_tsvector('english', summary_text) @@ plainto_tsquery('english', ${query})
+              WHERE agent_id = ${this.agentId}
+                AND to_tsvector('english', summary_text) @@ plainto_tsquery('english', ${query})
               ORDER BY created_at DESC
               LIMIT ${remaining}
             )
@@ -253,7 +258,7 @@ export class MemoryStore {
       const result = await sql`
         UPDATE memories
         SET deleted_at = now()
-        WHERE memory_id = ${memoryId} AND deleted_at IS NULL
+        WHERE memory_id = ${memoryId} AND agent_id = ${this.agentId} AND deleted_at IS NULL
       `
       return (result as unknown as { count: number }).count > 0
     } catch (error) {
@@ -272,7 +277,7 @@ export class MemoryStore {
 
     try {
       const [row] = await sql`
-        SELECT COUNT(*)::int AS count FROM memories WHERE deleted_at IS NULL
+        SELECT COUNT(*)::int AS count FROM memories WHERE deleted_at IS NULL AND agent_id = ${this.agentId}
       `
       return row.count as number
     } catch (error) {
@@ -304,7 +309,7 @@ export class MemoryStore {
         SELECT DISTINCT unnest(tags) AS tag
         FROM (
           SELECT tags FROM memories
-          WHERE deleted_at IS NULL AND array_length(tags, 1) > 0
+          WHERE deleted_at IS NULL AND agent_id = ${this.agentId} AND array_length(tags, 1) > 0
           ORDER BY created_at DESC
           LIMIT ${limit}
         ) recent
@@ -361,7 +366,3 @@ export class MemoryStore {
   }
 }
 
-/**
- * Singleton memory store instance.
- */
-export const memoryStore = new MemoryStore()

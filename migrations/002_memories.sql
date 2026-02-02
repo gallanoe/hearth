@@ -1,5 +1,6 @@
 CREATE TABLE memories (
     memory_id       SERIAL PRIMARY KEY,
+    agent_id        TEXT NOT NULL DEFAULT 'default',
     content         TEXT NOT NULL,
     tags            TEXT[] DEFAULT '{}',
 
@@ -23,3 +24,6 @@ CREATE INDEX idx_memories_tags ON memories USING GIN (tags);
 
 -- Active memories (not deleted)
 CREATE INDEX idx_memories_active ON memories (created_at DESC) WHERE deleted_at IS NULL;
+
+-- Agent ID index for multi-agent filtering
+CREATE INDEX idx_memories_agent ON memories(agent_id);

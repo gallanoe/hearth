@@ -1,7 +1,6 @@
 import { z } from "zod"
 import type { ExecutableTool, ToolResult, Room } from "../types/rooms"
 import { resolveDescription } from "../types/rooms"
-import { roomDecorationStore } from "../data/decorations"
 
 /**
  * Interface for room lookups needed by decoration tools.
@@ -49,8 +48,8 @@ Use action="reset" to restore the room's original description.`,
 
       switch (action) {
         case "view": {
-          const decoratedDescription = roomDecorationStore.getDecoratedDescription(currentRoomId)
-          const isDecorated = roomDecorationStore.isDecorated(currentRoomId)
+          const decoratedDescription = context.stores.decorations.getDecoratedDescription(currentRoomId)
+          const isDecorated = context.stores.decorations.isDecorated(currentRoomId)
 
           let output = `Current description of ${currentRoom.name}${isDecorated ? " (decorated)" : " (default)"}:\n\n${decoratedDescription ?? defaultDescription}`
 
@@ -65,7 +64,7 @@ Use action="reset" to restore the room's original description.`,
             }
           }
 
-          const previousDecoration = roomDecorationStore.setDecoration(currentRoomId, newDescription.trim())
+          const previousDecoration = context.stores.decorations.setDecoration(currentRoomId, newDescription.trim())
           const previousText = previousDecoration?.description ?? defaultDescription
 
           return {
@@ -75,7 +74,7 @@ Use action="reset" to restore the room's original description.`,
         }
 
         case "reset": {
-          const wasDecorated = roomDecorationStore.isDecorated(currentRoomId)
+          const wasDecorated = context.stores.decorations.isDecorated(currentRoomId)
 
           if (!wasDecorated) {
             return {
@@ -84,7 +83,7 @@ Use action="reset" to restore the room's original description.`,
             }
           }
 
-          const removedDecoration = roomDecorationStore.removeDecoration(currentRoomId)
+          const removedDecoration = context.stores.decorations.removeDecoration(currentRoomId)
 
           return {
             success: true,

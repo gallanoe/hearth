@@ -187,8 +187,3 @@ export class LetterStore {
     this.welcomeLetterSent = true
   }
 }
-
-/**
- * Singleton letter store instance.
- */
-export const letterStore = new LetterStore()

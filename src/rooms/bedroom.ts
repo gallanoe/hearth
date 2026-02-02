@@ -1,6 +1,5 @@
 import { z } from "zod"
 import type { Room, ExecutableTool, ToolResult, AgentContext } from "../types/rooms"
-import { personaStore } from "../data/persona"
 
 const sleep: ExecutableTool = {
   name: "shutdown",
@@ -66,14 +65,14 @@ Use action="reset" to restore the default persona.`,
       .optional()
       .describe("Required when action is 'edit'. The new persona text to set."),
   }),
-  execute: async (params, _context): Promise<ToolResult> => {
+  execute: async (params, context): Promise<ToolResult> => {
     const action = params.action as "view" | "edit" | "reset"
     const newPersona = params.newPersona as string | undefined
 
     switch (action) {
       case "view": {
-        const currentPersona = personaStore.getPersona()
-        const isCustom = personaStore.isCustomized()
+        const currentPersona = context.stores.persona.getPersona()
+        const isCustom = context.stores.persona.isCustomized()
         
         let output = `Your current persona${isCustom ? " (customized)" : " (default)"}:\n\n${currentPersona}`
         
@@ -88,7 +87,7 @@ Use action="reset" to restore the default persona.`,
           }
         }
         
-        personaStore.setPersona(newPersona.trim())
+        context.stores.persona.setPersona(newPersona.trim())
         
         return {
           success: true,
@@ -97,7 +96,7 @@ Use action="reset" to restore the default persona.`,
       }
       
       case "reset": {
-        const wasCustomized = personaStore.isCustomized()
+        const wasCustomized = context.stores.persona.isCustomized()
         
         if (!wasCustomized) {
           return {
@@ -106,11 +105,11 @@ Use action="reset" to restore the default persona.`,
           }
         }
         
-        personaStore.resetToDefault()
-        
+        context.stores.persona.resetToDefault()
+
         return {
           success: true,
-          output: `Persona reset to default. Default persona restored:\n${personaStore.getDefaultPersona()}`,
+          output: `Persona reset to default. Default persona restored:\n${context.stores.persona.getDefaultPersona()}`,
         }
       }
       

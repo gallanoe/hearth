@@ -53,8 +53,3 @@ export class PersonaStore {
     return this.persona !== DEFAULT_PERSONA
   }
 }
-
-/**
- * Singleton persona store instance.
- */
-export const personaStore = new PersonaStore()

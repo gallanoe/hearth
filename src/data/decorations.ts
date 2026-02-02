@@ -82,7 +82,3 @@ export class RoomDecorationStore {
   }
 }
 
-/**
- * Singleton decoration store instance.
- */
-export const roomDecorationStore = new RoomDecorationStore()

@@ -178,8 +178,3 @@ export class BookStore {
     return this.list().map((b) => b.title)
   }
 }
-
-/**
- * Singleton book store instance.
- */
-export const bookStore = new BookStore()

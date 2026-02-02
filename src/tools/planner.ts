@@ -1,6 +1,5 @@
 import { z } from "zod"
 import type { ExecutableTool, ToolResult } from "../types/rooms"
-import { planStore } from "../data/plans"
 import { formatRelativeTime } from "../data/letters"
 
 export const plans: ExecutableTool = {
@@ -40,7 +39,7 @@ export const plans: ExecutableTool = {
         if (!title) {
           return { success: false, output: "Title is required to create a plan." }
         }
-        const plan = await planStore.createPlan(title, context.currentSession)
+        const plan = await context.stores.plans.createPlan(title, context.currentSession)
         return {
           success: true,
           output: `Created plan #${plan.id}: ${plan.title}`,
@@ -51,7 +50,7 @@ export const plans: ExecutableTool = {
         if (!planId) {
           return { success: false, output: "planId is required to view a plan." }
         }
-        const plan = await planStore.getPlan(planId)
+        const plan = await context.stores.plans.getPlan(planId)
         if (!plan) {
           return { success: false, output: `No plan found with ID ${planId}.` }
         }
@@ -80,7 +79,7 @@ export const plans: ExecutableTool = {
       }
 
       case "list": {
-        const openPlans = await planStore.listOpen()
+        const openPlans = await context.stores.plans.listOpen()
         if (openPlans.length === 0) {
           return { success: true, output: "No open plans." }
         }
@@ -106,7 +105,7 @@ export const plans: ExecutableTool = {
         if (!planId) {
           return { success: false, output: "planId is required to close a plan." }
         }
-        const closed = await planStore.closePlan(planId)
+        const closed = await context.stores.plans.closePlan(planId)
         if (!closed) {
           return { success: false, output: `No plan found with ID ${planId}.` }
         }
@@ -117,7 +116,7 @@ export const plans: ExecutableTool = {
         if (!planId) {
           return { success: false, output: "planId is required to set a plan as active." }
         }
-        const activated = await planStore.setActive(planId)
+        const activated = await context.stores.plans.setActive(planId)
         if (!activated) {
           return { success: false, output: `No open plan found with ID ${planId}.` }
         }
@@ -125,7 +124,7 @@ export const plans: ExecutableTool = {
       }
 
       case "clear_active": {
-        await planStore.clearActive()
+        await context.stores.plans.clearActive()
         return { success: true, output: "Active plan cleared." }
       }
 
@@ -136,7 +135,7 @@ export const plans: ExecutableTool = {
         if (!content) {
           return { success: false, output: "content is required to add a task." }
         }
-        const task = await planStore.addTask(planId, content, notes)
+        const task = await context.stores.plans.addTask(planId, content, notes)
         if (!task) {
           return { success: false, output: `No plan found with ID ${planId}.` }
         }
@@ -159,7 +158,7 @@ export const plans: ExecutableTool = {
           return { success: false, output: "No fields provided to update." }
         }
 
-        const updated = await planStore.updateTask(taskId, updates)
+        const updated = await context.stores.plans.updateTask(taskId, updates)
         if (!updated) {
           return { success: false, output: `No task found with ID ${taskId}.` }
         }
@@ -170,7 +169,7 @@ export const plans: ExecutableTool = {
         if (!taskId) {
           return { success: false, output: "taskId is required to remove a task." }
         }
-        const removed = await planStore.removeTask(taskId)
+        const removed = await context.stores.plans.removeTask(taskId)
         if (!removed) {
           return { success: false, output: `No task found with ID ${taskId}.` }
         }

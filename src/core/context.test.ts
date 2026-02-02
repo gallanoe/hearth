@@ -7,7 +7,12 @@ import {
 } from "./context"
 import type { BudgetState } from "./budget"
 import type { Room } from "../types/rooms"
+import { PersonaStore } from "../data/persona"
+import { RoomDecorationStore } from "../data/decorations"
 import { z } from "zod"
+
+const persona = new PersonaStore()
+const decorations = new RoomDecorationStore()
 
 function makeBudget(overrides: Partial<BudgetState> = {}): BudgetState {
   return {
@@ -34,7 +39,7 @@ function makeRoom(overrides: Partial<Room> = {}): Room {
 
 describe("buildSystemPrompt", () => {
   test("includes persona and mechanics", () => {
-    const prompt = buildSystemPrompt(makeBudget())
+    const prompt = buildSystemPrompt(makeBudget(), persona)
     expect(prompt).toContain("Mechanics:")
     expect(prompt).toContain("move_to")
     expect(prompt).toContain("Budget:")
@@ -44,7 +49,7 @@ describe("buildSystemPrompt", () => {
     const prompt = buildSystemPrompt(makeBudget({
       spent: 900_000,
       remaining: 100_000,
-    }))
+    }), persona)
     expect(prompt).toContain("BUDGET LOW")
     expect(prompt).toContain("wrapping up")
   })
@@ -53,7 +58,7 @@ describe("buildSystemPrompt", () => {
     const prompt = buildSystemPrompt(makeBudget({
       spent: 100_000,
       remaining: 900_000,
-    }))
+    }), persona)
     expect(prompt).not.toContain("BUDGET LOW")
     expect(prompt).toContain("Budget:")
   })
@@ -71,7 +76,7 @@ describe("buildWakeUpMessage", () => {
       memoryCount: 0,
       openPlanCount: 0,
       activePlanTitle: null,
-    })
+    }, decorations)
     expect(msg).toContain("Session 5")
     expect(msg).toContain("A cozy bedroom.")
     expect(msg).toContain("1000k tokens")
@@ -88,7 +93,7 @@ describe("buildWakeUpMessage", () => {
       memoryCount: 0,
       openPlanCount: 0,
       activePlanTitle: null,
-    })
+    }, decorations)
     expect(msg).toContain("Summary of last session")
     expect(msg).toContain("read a book")
   })
@@ -104,7 +109,7 @@ describe("buildWakeUpMessage", () => {
       memoryCount: 0,
       openPlanCount: 0,
       activePlanTitle: null,
-    })
+    }, decorations)
     expect(msg).toContain("3 unread letters")
   })
 
@@ -119,7 +124,7 @@ describe("buildWakeUpMessage", () => {
       memoryCount: 0,
       openPlanCount: 0,
       activePlanTitle: null,
-    })
+    }, decorations)
     expect(msg).toContain("1 unread letter")
   })
 
@@ -134,7 +139,7 @@ describe("buildWakeUpMessage", () => {
       memoryCount: 7,
       openPlanCount: 0,
       activePlanTitle: null,
-    })
+    }, decorations)
     expect(msg).toContain("7 stored memories")
   })
 
@@ -149,7 +154,7 @@ describe("buildWakeUpMessage", () => {
       memoryCount: 0,
       openPlanCount: 0,
       activePlanTitle: null,
-    })
+    }, decorations)
     expect(msg).not.toContain("unread")
     expect(msg).not.toContain("stored memor")
   })
@@ -165,7 +170,7 @@ describe("buildWakeUpMessage", () => {
       memoryCount: 0,
       openPlanCount: 3,
       activePlanTitle: null,
-    })
+    }, decorations)
     expect(msg).toContain("3 open plans")
   })
 
@@ -180,7 +185,7 @@ describe("buildWakeUpMessage", () => {
       memoryCount: 0,
       openPlanCount: 2,
       activePlanTitle: "Read the library books",
-    })
+    }, decorations)
     expect(msg).toContain('2 open plans')
     expect(msg).toContain('Active: "Read the library books"')
   })
@@ -196,7 +201,7 @@ describe("buildWakeUpMessage", () => {
       memoryCount: 0,
       openPlanCount: 1,
       activePlanTitle: null,
-    })
+    }, decorations)
     expect(msg).toContain("1 open plan.")
   })
 
@@ -211,7 +216,7 @@ describe("buildWakeUpMessage", () => {
       memoryCount: 0,
       openPlanCount: 0,
       activePlanTitle: null,
-    })
+    }, decorations)
     expect(msg).not.toContain("open plan")
   })
 })
@@ -223,7 +228,7 @@ describe("buildRoomEntryMessage", () => {
       name: "Library",
       description: "A room full of books.",
     })
-    const msg = buildRoomEntryMessage(room)
+    const msg = buildRoomEntryMessage(room, decorations)
     expect(msg).toContain("Library")
     expect(msg).toContain("A room full of books.")
   })
@@ -237,7 +242,7 @@ describe("buildRoomEntryMessage", () => {
         execute: async () => ({ success: true, output: "" }),
       }],
     })
-    const msg = buildRoomEntryMessage(room)
+    const msg = buildRoomEntryMessage(room, decorations)
     expect(msg).toContain("read_book: Read a book.")
     // Universal tools always listed
     expect(msg).toContain("move_to")
@@ -246,14 +251,14 @@ describe("buildRoomEntryMessage", () => {
   })
 
   test("includes extra context when provided", () => {
-    const msg = buildRoomEntryMessage(makeRoom(), "The bed looks inviting.")
+    const msg = buildRoomEntryMessage(makeRoom(), decorations, "The bed looks inviting.")
     expect(msg).toContain("The bed looks inviting.")
   })
 })
 
 describe("buildNotificationMessage", () => {
   test("returns null when no notifications", () => {
-    expect(buildNotificationMessage({})).toBeNull()
+    expect(buildNotificationMessage({}, decorations)).toBeNull()
   })
 
   test("includes room entry when present", () => {
@@ -262,7 +267,7 @@ describe("buildNotificationMessage", () => {
         room: makeRoom({ id: "office", name: "Office", description: "A workspace." }),
         enterMessage: "The terminal hums.",
       },
-    })
+    }, decorations)
     expect(msg).not.toBeNull()
     expect(msg).toContain("Office")
     expect(msg).toContain("The terminal hums.")
@@ -275,7 +280,7 @@ describe("buildNotificationMessage", () => {
         total: 1_000_000,
         percentRemaining: 5,
       },
-    })
+    }, decorations)
     expect(msg).not.toBeNull()
     expect(msg).toContain("Budget warning")
     expect(msg).toContain("5%")
@@ -288,14 +293,14 @@ describe("buildNotificationMessage", () => {
         total: 1_000_000,
         percentRemaining: 30,
       },
-    })
+    }, decorations)
     expect(msg).toBeNull()
   })
 
   test("includes inbox notification", () => {
     const msg = buildNotificationMessage({
       inboxCount: 2,
-    })
+    }, decorations)
     expect(msg).not.toBeNull()
     expect(msg).toContain("2 unread letters")
   })
@@ -306,7 +311,7 @@ describe("buildNotificationMessage", () => {
         room: makeRoom({ id: "office", name: "Office", description: "A workspace." }),
       },
       inboxCount: 1,
-    })
+    }, decorations)
     expect(msg).toContain("Office")
     expect(msg).toContain("1 unread letter")
   })

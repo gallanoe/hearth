@@ -1,5 +1,27 @@
 import type { z } from "zod"
 import type { Workspace } from "../workspace/types"
+import type { LetterStore } from "../data/letters"
+import type { PersonaStore } from "../data/persona"
+import type { RoomDecorationStore } from "../data/decorations"
+import type { ReflectionStore } from "../data/reflections"
+import type { BookStore } from "../data/books"
+import type { SessionStore } from "../data/sessions"
+import type { MemoryStore } from "../data/memories"
+import type { PlanStore } from "../data/plans"
+
+/**
+ * All stores an agent needs, keyed for easy access.
+ */
+export interface AgentStores {
+  letters: LetterStore
+  persona: PersonaStore
+  decorations: RoomDecorationStore
+  reflections: ReflectionStore
+  books: BookStore
+  sessions: SessionStore
+  memories: MemoryStore
+  plans: PlanStore
+}
 
 /**
  * Context passed to tool execution and room hooks.
@@ -8,6 +30,7 @@ import type { Workspace } from "../workspace/types"
 export interface AgentContext {
   agentId: string
   workspace: Workspace
+  stores: AgentStores
   currentRoom: string
   currentSession: number
   budget: {

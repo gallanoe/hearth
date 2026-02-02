@@ -3,6 +3,7 @@
 
 CREATE TABLE plans (
     plan_id           SERIAL PRIMARY KEY,
+    agent_id          TEXT NOT NULL DEFAULT 'default',
     title             TEXT NOT NULL,
     status            TEXT NOT NULL DEFAULT 'open'
                       CHECK (status IN ('open', 'closed')),
@@ -30,3 +31,6 @@ CREATE INDEX idx_plans_open ON plans (created_at DESC)
     WHERE status = 'open';
 
 CREATE INDEX idx_plan_tasks ON plan_tasks (plan_id, sort_order);
+
+-- Agent ID index for multi-agent filtering
+CREATE INDEX idx_plans_agent ON plans(agent_id);

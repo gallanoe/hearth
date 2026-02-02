@@ -71,8 +71,3 @@ export class ReflectionStore {
     return this.reflections.size
   }
 }
-
-/**
- * Singleton reflection store instance.
- */
-export const reflectionStore = new ReflectionStore()

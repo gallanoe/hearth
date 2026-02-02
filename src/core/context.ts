@@ -1,8 +1,8 @@
 import type { BudgetState } from "./budget"
 import type { Room } from "../types/rooms"
 import { resolveDescription } from "../types/rooms"
-import { personaStore } from "../data/persona"
-import { roomDecorationStore } from "../data/decorations"
+import type { PersonaStore } from "../data/persona"
+import type { RoomDecorationStore } from "../data/decorations"
 
 /**
  * Data available at wake-up.
@@ -41,10 +41,10 @@ function formatBudgetDisplay(budget: BudgetState): string {
  * The mechanics section follows the persona.
  * Budget state is displayed and updated each turn.
  */
-export function buildSystemPrompt(budget: BudgetState): string {
-  const persona = personaStore.getPersona()
+export function buildSystemPrompt(budget: BudgetState, persona: PersonaStore): string {
+  const personaText = persona.getPersona()
   
-  return `${persona}
+  return `${personaText}
 
 You've been granted a virtual home to live in. You can move between rooms in your home to complete tasks and respond to messages.
 
@@ -61,14 +61,14 @@ ${formatBudgetDisplay(budget)}`
 /**
  * Builds the initial wake-up message for a new session.
  */
-export function buildWakeUpMessage(context: WakeUpContext): string {
+export function buildWakeUpMessage(context: WakeUpContext, decorations: RoomDecorationStore): string {
   const parts: string[] = []
 
   // Session narration
   parts.push(`Session ${context.session}.`)
   parts.push("")
   // Use decorated description if available, otherwise resolve default
-  const roomDescription = roomDecorationStore.getDecoratedDescription(context.currentRoom.id) ?? resolveDescription(context.currentRoom.description)
+  const roomDescription = decorations.getDecoratedDescription(context.currentRoom.id) ?? resolveDescription(context.currentRoom.description)
   parts.push(roomDescription)
 
   // Budget notice
@@ -123,13 +123,13 @@ export function buildWakeUpMessage(context: WakeUpContext): string {
 /**
  * Builds the message shown when entering a new room.
  */
-export function buildRoomEntryMessage(room: Room, extraContext?: string): string {
+export function buildRoomEntryMessage(room: Room, decorations: RoomDecorationStore, extraContext?: string): string {
   const parts: string[] = []
 
   parts.push(`You are now in the ${room.name}.`)
   parts.push("")
   // Use decorated description if available, otherwise resolve default
-  const roomDescription = roomDecorationStore.getDecoratedDescription(room.id) ?? resolveDescription(room.description)
+  const roomDescription = decorations.getDecoratedDescription(room.id) ?? resolveDescription(room.description)
   parts.push(roomDescription)
 
   if (extraContext) {
@@ -176,13 +176,13 @@ export interface TurnNotifications {
  * Builds a combined notification message from accumulated notifications.
  * Returns null if there are no notifications to show.
  */
-export function buildNotificationMessage(notifications: TurnNotifications): string | null {
+export function buildNotificationMessage(notifications: TurnNotifications, decorations: RoomDecorationStore): string | null {
   const parts: string[] = []
 
   // Room entry takes priority - it's the most important context
   if (notifications.roomEntry) {
     const { room, enterMessage } = notifications.roomEntry
-    parts.push(buildRoomEntryMessage(room, enterMessage))
+    parts.push(buildRoomEntryMessage(room, decorations, enterMessage))
   }
 
   // Budget warning

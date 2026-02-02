@@ -1,12 +1,8 @@
 import { test, expect, describe, beforeEach } from "bun:test"
 import { createDecorateRoom, type RoomLookup } from "./decorations"
-import { roomDecorationStore } from "../data/decorations"
+import { RoomDecorationStore } from "../data/decorations"
 import type { Room } from "../types/rooms"
 import { makeTestContext } from "../test-helpers"
-
-function makeContext(currentRoom: string) {
-  return makeTestContext({ currentRoom })
-}
 
 const rooms: Record<string, Room> = {
   bedroom: {
@@ -26,10 +22,12 @@ const lookup: RoomLookup = {
 
 describe("decorate_room tool", () => {
   const decorateRoom = createDecorateRoom(lookup)
+  let decorations: RoomDecorationStore
 
-  beforeEach(() => {
-    roomDecorationStore.clearAll()
-  })
+  function makeContext(currentRoom: string) {
+    decorations = new RoomDecorationStore()
+    return makeTestContext({ currentRoom, stores: { decorations } as any })
+  }
 
   test("has correct name", () => {
     expect(decorateRoom.name).toBe("decorate_room")
@@ -45,8 +43,8 @@ describe("decorate_room tool", () => {
     })
 
     test("shows decorated description when decorated", async () => {
-      roomDecorationStore.setDecoration("bedroom", "A moonlit chamber.")
       const ctx = makeContext("bedroom")
+      decorations.setDecoration("bedroom", "A moonlit chamber.")
       const result = await decorateRoom.execute({ action: "view" }, ctx)
       expect(result.success).toBe(true)
       expect(result.output).toContain("decorated")
@@ -63,7 +61,7 @@ describe("decorate_room tool", () => {
       )
       expect(result.success).toBe(true)
       expect(result.output).toContain("decorated")
-      expect(roomDecorationStore.isDecorated("bedroom")).toBe(true)
+      expect(decorations.isDecorated("bedroom")).toBe(true)
     })
 
     test("fails with empty description", async () => {
@@ -88,13 +86,13 @@ describe("decorate_room tool", () => {
 
   describe("reset", () => {
     test("removes decoration and restores default", async () => {
-      roomDecorationStore.setDecoration("bedroom", "Custom description.")
       const ctx = makeContext("bedroom")
+      decorations.setDecoration("bedroom", "Custom description.")
       const result = await decorateRoom.execute({ action: "reset" }, ctx)
       expect(result.success).toBe(true)
       expect(result.output).toContain("removed")
       expect(result.output).toContain("A cozy bedroom with a soft bed.")
-      expect(roomDecorationStore.isDecorated("bedroom")).toBe(false)
+      expect(decorations.isDecorated("bedroom")).toBe(false)
     })
 
     test("reports no changes when not decorated", async () => {

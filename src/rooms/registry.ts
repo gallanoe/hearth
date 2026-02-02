@@ -1,7 +1,7 @@
 import type { Room, ExecutableTool, AgentContext, UniversalTools } from "../types/rooms"
 import { resolveDescription } from "../types/rooms"
 import type { ToolDefinition } from "../types/llm"
-import { roomDecorationStore } from "../data/decorations"
+import type { RoomDecorationStore } from "../data/decorations"
 import { createMoveTo } from "../tools/navigation"
 import { readInbox, sendMessage } from "../tools/communication"
 import { createDecorateRoom } from "../tools/decorations"
@@ -17,7 +17,7 @@ export class RoomRegistry {
   private roomStates: Map<string, Record<string, unknown>> = new Map()
   private universalTools: UniversalTools
 
-  constructor() {
+  constructor(private decorationStore: RoomDecorationStore) {
     this.universalTools = {
       moveTo: createMoveTo(this),
       readInbox,
@@ -82,7 +82,7 @@ export class RoomRegistry {
     if (!room) return undefined
 
     // Return decorated description if set, otherwise resolve the default
-    return roomDecorationStore.getDecoratedDescription(roomId) ?? resolveDescription(room.description)
+    return this.decorationStore.getDecoratedDescription(roomId) ?? resolveDescription(room.description)
   }
 
   /**
@@ -164,7 +164,3 @@ export class RoomRegistry {
   }
 }
 
-/**
- * Singleton registry instance.
- */
-export const roomRegistry = new RoomRegistry()

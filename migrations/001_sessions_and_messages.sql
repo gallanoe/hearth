@@ -1,6 +1,7 @@
 -- Sessions map 1:1 with wake-sleep cycles
 CREATE TABLE sessions (
     session_id        SERIAL PRIMARY KEY,
+    agent_id          TEXT NOT NULL DEFAULT 'default',
     started_at        TIMESTAMPTZ NOT NULL DEFAULT now(),
     ended_at          TIMESTAMPTZ,
     end_reason        TEXT CHECK (end_reason IN ('sleep', 'budget_exhausted')),
@@ -12,6 +13,7 @@ CREATE TABLE sessions (
 -- Compaction events must be created before messages that reference them
 CREATE TABLE compaction_events (
     compaction_id       SERIAL PRIMARY KEY,
+    agent_id            TEXT NOT NULL DEFAULT 'default',
     session_id          INTEGER NOT NULL REFERENCES sessions(session_id),
     summary_message_id  INTEGER, -- Will be updated after message is inserted
 
@@ -28,6 +30,7 @@ CREATE TABLE compaction_events (
 -- Every message ever sent, including compacted ones
 CREATE TABLE messages (
     message_id        SERIAL PRIMARY KEY,
+    agent_id          TEXT NOT NULL DEFAULT 'default',
     session_id        INTEGER NOT NULL REFERENCES sessions(session_id),
     sequence_num      INTEGER NOT NULL,
 
@@ -60,6 +63,7 @@ ALTER TABLE compaction_events
 -- Denormalized summary text — survives if the summary message is itself compacted later
 CREATE TABLE compaction_summaries (
     summary_id           SERIAL PRIMARY KEY,
+    agent_id             TEXT NOT NULL DEFAULT 'default',
     compaction_id        INTEGER NOT NULL REFERENCES compaction_events(compaction_id),
     message_id           INTEGER NOT NULL REFERENCES messages(message_id),
     summary_text         TEXT NOT NULL,
@@ -71,6 +75,7 @@ CREATE TABLE compaction_summaries (
 -- Turn-level records (mirrors TurnRecord from loop.ts)
 CREATE TABLE turns (
     turn_id           SERIAL PRIMARY KEY,
+    agent_id          TEXT NOT NULL DEFAULT 'default',
     session_id        INTEGER NOT NULL REFERENCES sessions(session_id),
     sequence          INTEGER NOT NULL,
     room              TEXT NOT NULL,
@@ -98,3 +103,8 @@ CREATE INDEX idx_compaction_session
 
 CREATE INDEX idx_turns_session
     ON turns(session_id, sequence);
+
+-- Agent ID indexes for multi-agent filtering
+CREATE INDEX idx_sessions_agent ON sessions(agent_id);
+CREATE INDEX idx_messages_agent ON messages(agent_id);
+CREATE INDEX idx_turns_agent ON turns(agent_id);

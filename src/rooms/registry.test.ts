@@ -1,5 +1,6 @@
 import { test, expect, describe, beforeEach } from "bun:test"
 import { RoomRegistry } from "./registry"
+import { RoomDecorationStore } from "../data/decorations"
 import type { Room } from "../types/rooms"
 import { makeTestContext } from "../test-helpers"
 import { z } from "zod"
@@ -21,7 +22,7 @@ describe("RoomRegistry", () => {
   let registry: RoomRegistry
 
   beforeEach(() => {
-    registry = new RoomRegistry()
+    registry = new RoomRegistry(new RoomDecorationStore())
   })
 
   describe("register and get", () => {

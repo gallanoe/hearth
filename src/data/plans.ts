@@ -49,6 +49,8 @@ export class PlanStore {
   private nextPlanId = 1
   private nextTaskId = 1
 
+  constructor(private agentId: string = 'default') {}
+
   async createPlan(title: string, sessionId: number): Promise<Plan> {
     if (!sql) {
       return this.createPlanFallback(title, sessionId)
@@ -56,8 +58,8 @@ export class PlanStore {
 
     try {
       const [row] = await sql`
-        INSERT INTO plans (title, created_session)
-        VALUES (${title}, ${sessionId})
+        INSERT INTO plans (agent_id, title, created_session)
+        VALUES (${this.agentId}, ${title}, ${sessionId})
         RETURNING plan_id, title, status, is_active, created_session, created_at, updated_at
       `
       return {
@@ -105,7 +107,7 @@ export class PlanStore {
       const result = await sql`
         UPDATE plans
         SET status = 'closed', is_active = false, updated_at = now()
-        WHERE plan_id = ${planId}
+        WHERE plan_id = ${planId} AND agent_id = ${this.agentId}
       `
       return (result as unknown as { count: number }).count > 0
     } catch (error) {
@@ -127,10 +129,10 @@ export class PlanStore {
     try {
       // Clear existing active, then set the new one — in a transaction
       await sql.begin(async (tx) => {
-        await tx`UPDATE plans SET is_active = false WHERE is_active = true`
+        await tx`UPDATE plans SET is_active = false WHERE is_active = true AND agent_id = ${this.agentId}`
         await tx`
           UPDATE plans SET is_active = true, updated_at = now()
-          WHERE plan_id = ${planId} AND status = 'open'
+          WHERE plan_id = ${planId} AND status = 'open' AND agent_id = ${this.agentId}
         `
       })
       return true
@@ -147,7 +149,7 @@ export class PlanStore {
     }
 
     try {
-      await sql`UPDATE plans SET is_active = false WHERE is_active = true`
+      await sql`UPDATE plans SET is_active = false WHERE is_active = true AND agent_id = ${this.agentId}`
       return true
     } catch (error) {
       console.error("PlanStore.clearActive failed:", error)
@@ -311,7 +313,7 @@ export class PlanStore {
     try {
       const [planRow] = await sql`
         SELECT plan_id, title, status, is_active, created_session, created_at, updated_at
-        FROM plans WHERE plan_id = ${planId}
+        FROM plans WHERE plan_id = ${planId} AND agent_id = ${this.agentId}
       `
       if (!planRow) return null
 
@@ -356,7 +358,7 @@ export class PlanStore {
     try {
       const [row] = await sql`
         SELECT plan_id, title, status, is_active, created_session, created_at, updated_at
-        FROM plans WHERE is_active = true LIMIT 1
+        FROM plans WHERE is_active = true AND agent_id = ${this.agentId} LIMIT 1
       `
       if (!row) return null
       return {
@@ -391,7 +393,7 @@ export class PlanStore {
     try {
       const planRows = await sql`
         SELECT plan_id, title, status, is_active, created_session, created_at, updated_at
-        FROM plans WHERE status = 'open'
+        FROM plans WHERE status = 'open' AND agent_id = ${this.agentId}
         ORDER BY created_at DESC
       `
 
@@ -439,7 +441,7 @@ export class PlanStore {
 
     try {
       const [row] = await sql`
-        SELECT COUNT(*)::int AS count FROM plans WHERE status = 'open'
+        SELECT COUNT(*)::int AS count FROM plans WHERE status = 'open' AND agent_id = ${this.agentId}
       `
       return row.count as number
     } catch (error) {
@@ -449,4 +451,3 @@ export class PlanStore {
   }
 }
 
-export const planStore = new PlanStore()

@@ -15,6 +15,7 @@ export interface BudgetConfig {
     remaining: number
     warningThreshold: number
     warningIssued: boolean
+    totalCost: number
   }
   
   /**
@@ -23,22 +24,26 @@ export interface BudgetConfig {
   export class BudgetTracker {
     private total: number
     private spent: number
+    private totalCost: number = 0
     private warningThreshold: number
     private warningIssued: boolean = false
-  
+
     constructor(config: BudgetConfig) {
       this.total = config.totalTokens
       this.spent = 0
       this.warningThreshold = config.warningThreshold
     }
-  
+
     /**
-     * Record tokens spent on a turn.
+     * Record tokens and cost spent on a turn.
      */
-    recordUsage(inputTokens: number, outputTokens: number): void {
+    recordUsage(inputTokens: number, outputTokens: number, cost?: number): void {
       this.spent += inputTokens + outputTokens
+      if (cost != null) {
+        this.totalCost += cost
+      }
     }
-  
+
     /**
      * Get current budget state.
      */
@@ -49,6 +54,7 @@ export interface BudgetConfig {
         remaining: this.total - this.spent,
         warningThreshold: this.warningThreshold,
         warningIssued: this.warningIssued,
+        totalCost: this.totalCost,
       }
     }
   

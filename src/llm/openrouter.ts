@@ -53,6 +53,7 @@ interface OpenAIResponse {
   usage: {
     prompt_tokens: number
     completion_tokens: number
+    cost?: number
   }
 }
 
@@ -256,6 +257,7 @@ export class OpenRouterProviderV2 implements LLMProvider {
         usage: {
           inputTokens: data.usage.prompt_tokens,
           outputTokens: data.usage.completion_tokens,
+          cost: data.usage.cost,
         },
       }
     }
@@ -267,6 +269,7 @@ export class OpenRouterProviderV2 implements LLMProvider {
       usage: {
         inputTokens: data.usage.prompt_tokens,
         outputTokens: data.usage.completion_tokens,
+        cost: data.usage.cost,
       },
     }
   }

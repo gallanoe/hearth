@@ -76,6 +76,7 @@ CREATE TABLE turns (
     room              TEXT NOT NULL,
     input_tokens      INTEGER,
     output_tokens     INTEGER,
+    cost              NUMERIC,
     assistant_message TEXT,
     tool_calls        JSONB,
     tool_results      JSONB,

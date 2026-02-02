@@ -34,6 +34,7 @@ export interface SessionResult {
   sessionNumber: number
   endReason: "sleep" | "budget_exhausted"
   totalTokensUsed: number
+  totalCost: number
   turns: TurnRecord[]
   sessionSummary: string | null // Summary of this session for the next one
 }
@@ -46,6 +47,7 @@ export interface TurnRecord {
   room: string
   inputTokens: number
   outputTokens: number
+  cost?: number
   assistantMessage: string | null
   toolCalls: ToolCall[]
   toolResults: { name: string; result: ToolResult }[]
@@ -138,7 +140,7 @@ export async function runSession(
     const response = await llm.send(systemPrompt, messages, tools)
 
     // Record usage
-    budget.recordUsage(response.usage.inputTokens, response.usage.outputTokens)
+    budget.recordUsage(response.usage.inputTokens, response.usage.outputTokens, response.usage.cost)
     context.budget = budget.getState()
 
     // Check if context compaction is needed (separate from daily budget)
@@ -189,6 +191,7 @@ export async function runSession(
       room: context.currentRoom,
       inputTokens: response.usage.inputTokens,
       outputTokens: response.usage.outputTokens,
+      cost: response.usage.cost,
       assistantMessage: response.content,
       toolCalls: response.toolCalls,
       toolResults: [],
@@ -345,10 +348,12 @@ export async function runSession(
     // Log token usage, context window size, and budget state
     const budgetState = budget.getState()
     const budgetPercent = Math.round((budgetState.remaining / budgetState.total) * 100)
+    const costStr = turn.cost != null ? ` | $${turn.cost.toFixed(4)}` : ""
+    const totalCostStr = budgetState.totalCost > 0 ? ` | Total cost: $${budgetState.totalCost.toFixed(4)}` : ""
     console.log(`\n📊 Turn ${turnSequence}`)
-    console.log(`   Usage: ${turn.inputTokens.toLocaleString()} input tokens | ${turn.outputTokens.toLocaleString()} output tokens`)
+    console.log(`   Usage: ${turn.inputTokens.toLocaleString()} input tokens | ${turn.outputTokens.toLocaleString()} output tokens${costStr}`)
     console.log(`   Context: ${messages.length} messages, ~${messages.reduce((acc, msg) => acc + (msg.content?.length ?? 0) / 4, 0)} tokens`)
-    console.log(`   Budget: ${budgetState.remaining.toLocaleString()} tokens / ${budgetState.total.toLocaleString()} tokens (${budgetPercent}%)`)
+    console.log(`   Budget: ${budgetState.remaining.toLocaleString()} tokens / ${budgetState.total.toLocaleString()} tokens (${budgetPercent}%)${totalCostStr}`)
 
     turns.push(turn)
 
@@ -380,12 +385,14 @@ export async function runSession(
   }
 
   // End session in database
+  const finalState = budget.getState()
   try {
     await store.endSession(
       sessionId,
       endReason,
-      budget.getState().spent,
-      sessionSummary
+      finalState.spent,
+      sessionSummary,
+      finalState.totalCost
     )
   } catch (error) {
     console.error("Failed to end session in database:", error)
@@ -394,7 +401,8 @@ export async function runSession(
   return {
     sessionNumber: config.sessionNumber,
     endReason,
-    totalTokensUsed: budget.getState().spent,
+    totalTokensUsed: finalState.spent,
+    totalCost: finalState.totalCost,
     turns,
     sessionSummary,
   }

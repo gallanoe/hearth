@@ -16,6 +16,7 @@ function makeBudget(overrides: Partial<BudgetState> = {}): BudgetState {
     remaining: 1_000_000,
     warningThreshold: 200_000,
     warningIssued: false,
+    totalCost: 0,
     ...overrides,
   }
 }

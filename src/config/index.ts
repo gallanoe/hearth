@@ -12,7 +12,7 @@ export const DEFAULT_BUDGET = {
 
 // --- Context Window & Compaction ---
 
-export const CONTEXT_WINDOW = 200_000 // Model's maximum context size
+export const CONTEXT_WINDOW = 100_000 // Model's maximum context size
 export const COMPACTION_THRESHOLD = 0.9 // Trigger compaction at 90%
 export const RECENT_MESSAGES_TO_KEEP = 10 // Preserve recent messages for continuity
 export const COMPACTION_TRIGGER = CONTEXT_WINDOW * COMPACTION_THRESHOLD

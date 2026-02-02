@@ -34,6 +34,7 @@ export interface LLMResponse {
   usage: {
     inputTokens: number
     outputTokens: number
+    cost?: number
   }
 }
 

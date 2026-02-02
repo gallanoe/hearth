@@ -73,18 +73,20 @@ export class SessionStore {
     sessionId: number,
     endReason: "sleep" | "budget_exhausted",
     totalTokensUsed: number,
-    sessionSummary: string | null
+    sessionSummary: string | null,
+    totalCost?: number
   ): Promise<void> {
     if (!sql) return
 
     try {
       await sql`
         UPDATE sessions
-        SET 
+        SET
           ended_at = now(),
           end_reason = ${endReason},
           total_tokens_used = ${totalTokensUsed},
-          session_summary = ${sessionSummary}
+          session_summary = ${sessionSummary},
+          metadata = COALESCE(metadata, '{}'::jsonb) || ${JSON.stringify({ totalCost: totalCost ?? 0 })}::jsonb
         WHERE session_id = ${sessionId}
       `
     } catch (error) {
@@ -269,6 +271,7 @@ export class SessionStore {
           room,
           input_tokens,
           output_tokens,
+          cost,
           assistant_message,
           tool_calls,
           tool_results
@@ -279,6 +282,7 @@ export class SessionStore {
           ${turn.room},
           ${turn.inputTokens},
           ${turn.outputTokens},
+          ${turn.cost ?? null},
           ${turn.assistantMessage},
           ${JSON.stringify(turn.toolCalls)},
           ${JSON.stringify(turn.toolResults)}

@@ -126,6 +126,6 @@ export const library: Room = {
     const plural = bookCount === 1 ? "book" : "books"
     return `A room with bookshelves (${bookCount} ${plural}) and a window. Reading and reflection tools available.`
   },
-  tools: [listBooks, readBook, meditate, lookOutside],
+  tools: [listBooks, readBook],
   transitions: "*", // Can go anywhere from the library
 }

@@ -243,9 +243,20 @@ export async function runSession(
             output: `Unknown tool: ${toolCall.name}`,
           }
         } else {
-          console.log(`\n🔧 ${toolCall.name}`)
-          result = await tool.execute(toolCall.args, context)
-          console.log(`   ${result.output.slice(0, 80)}${result.output.length > 250 ? "..." : ""}`)
+          // Validate args against the tool's input schema
+          const parsed = tool.inputSchema.safeParse(toolCall.args)
+          if (!parsed.success) {
+            const errors = parsed.error.issues.map((i) => `${i.path.join(".")}: ${i.message}`).join("; ")
+            result = {
+              success: false,
+              output: `Invalid arguments for ${toolCall.name}: ${errors}`,
+            }
+            console.log(`\n🔧 ${toolCall.name} — validation failed: ${errors}`)
+          } else {
+            console.log(`\n🔧 ${toolCall.name}`)
+            result = await tool.execute(parsed.data, context)
+            console.log(`   ${result.output.slice(0, 80)}${result.output.length > 250 ? "..." : ""}`)
+          }
         }
 
         turn.toolResults.push({ name: toolCall.name, result })

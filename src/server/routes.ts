@@ -1,52 +1,134 @@
-import type { SessionResult } from "../core/loop"
-import type { AgentStores } from "../types/rooms"
+import type { LLMProvider } from "../types/llm"
+import type { AgentManager } from "../agents/manager"
 import type { TranscriptRow } from "../data/sessions"
-import { DECAY_TURN_WINDOW, DECAY_STUB_THRESHOLD } from "../config"
+import { runSession, type SessionConfig } from "../core/loop"
+import { DEFAULT_BUDGET, DECAY_TURN_WINDOW, DECAY_STUB_THRESHOLD } from "../config"
 
 /**
- * Creates all API route handlers.
- * Receives shared state via closure to keep routes testable.
+ * Creates all API route handlers for the multi-agent API.
  */
-export function createRoutes(state: {
-  isRunning: () => boolean
-  lastResult: () => SessionResult | null
-  stores: AgentStores
-}) {
-  const { stores } = state
+export function createRoutes(llm: LLMProvider, manager: AgentManager) {
+  /** Helper: look up agent state, return 404 Response if not found. */
+  function getAgentOrFail(agentId: string) {
+    const state = manager.getState(agentId)
+    if (!state) return null
+    return state
+  }
 
   return {
-    "/api/status": {
-      GET: async () => {
-        const sessions = await stores.sessions.listSessions()
-        const latestSession = sessions[0] ?? null
-        const currentSession = latestSession?.sessionId ?? 0
-        const last = state.lastResult()
+    "/api/agents": {
+      POST: async (req: Request) => {
+        const body = (await req.json()) as { agentId?: string }
+        const agentId = body.agentId?.trim()
+        if (!agentId) {
+          return Response.json({ error: "agentId is required" }, { status: 400 })
+        }
+
+        try {
+          await manager.createAgent(agentId)
+          return Response.json({ agentId }, { status: 201 })
+        } catch (error) {
+          const message = error instanceof Error ? error.message : "Failed to create agent"
+          return Response.json({ error: message }, { status: 400 })
+        }
+      },
+
+      GET: () => {
+        return Response.json({ agents: manager.listAgents() })
+      },
+    },
+
+    "/api/agents/:id": {
+      GET: (req: Request & { params: { id: string } }) => {
+        const state = getAgentOrFail(req.params.id)
+        if (!state) return Response.json({ error: "Agent not found" }, { status: 404 })
+
+        const agentId = req.params.id
+        const lastResult = manager.getLastResult(agentId)
 
         return Response.json({
-          status: state.isRunning() ? "awake" : "asleep",
-          currentSession,
-          databaseConnected: (await import("../data/db")).isDatabaseAvailable(),
-          lastResult: latestSession
+          agentId,
+          status: manager.isRunning(agentId) ? "awake" : "asleep",
+          lastResult: lastResult
             ? {
-                endReason: latestSession.endReason,
-                totalTokensUsed: latestSession.totalTokensUsed,
-                sessionSummary: latestSession.sessionSummary,
+                endReason: lastResult.endReason,
+                totalTokensUsed: lastResult.totalTokensUsed,
+                turns: lastResult.turns.length,
+                sessionSummary: lastResult.sessionSummary,
               }
-            : last
-              ? {
-                  endReason: last.endReason,
-                  totalTokensUsed: last.totalTokensUsed,
-                  turns: last.turns.length,
-                  sessionSummary: last.sessionSummary,
-                }
-              : null,
+            : null,
         })
       },
     },
 
-    "/api/inbox": {
-      GET: () => {
-        const letters = stores.letters.getInbox().map((l) => ({
+    "/api/agents/:id/wake": {
+      POST: async (req: Request & { params: { id: string } }) => {
+        const agentId = req.params.id
+        const state = getAgentOrFail(agentId)
+        if (!state) return Response.json({ error: "Agent not found" }, { status: 404 })
+
+        if (manager.isRunning(agentId)) {
+          return Response.json({ error: "Agent is already awake" }, { status: 400 })
+        }
+
+        const { stores } = state
+        const nextSessionNumber = await stores.sessions.getNextSessionNumber()
+
+        if (nextSessionNumber === 1) {
+          stores.letters.sendWelcomeLetterIfFirstSession()
+        }
+
+        manager.setRunning(agentId, true)
+
+        const previousSessionSummary = await stores.sessions.getPreviousSessionSummary()
+        const lastResult = manager.getLastResult(agentId)
+
+        const sessionConfig: SessionConfig = {
+          sessionNumber: nextSessionNumber,
+          budget: DEFAULT_BUDGET,
+          reflections: [],
+          inboxCount: stores.letters.getUnreadCount(),
+          previousSessionSummary: previousSessionSummary ?? lastResult?.sessionSummary ?? null,
+        }
+
+        // Fire and forget - run session asynchronously
+        runSession(llm, sessionConfig, state)
+          .then((result) => {
+            manager.setLastResult(agentId, result)
+            manager.setRunning(agentId, false)
+            console.log(`\n✅ Session ${nextSessionNumber} completed for ${agentId}: ${result.endReason}`)
+          })
+          .catch((error) => {
+            manager.setRunning(agentId, false)
+            console.error(`Error running session for ${agentId}:`, error)
+          })
+
+        return Response.json({
+          success: true,
+          message: `Agent ${agentId} is waking up`,
+          session: nextSessionNumber,
+        })
+      },
+    },
+
+    "/api/agents/:id/sleep": {
+      POST: (req: Request & { params: { id: string } }) => {
+        const state = getAgentOrFail(req.params.id)
+        if (!state) return Response.json({ error: "Agent not found" }, { status: 404 })
+
+        return Response.json(
+          { error: "External sleep not implemented. Agents sleep via the go_to_sleep tool." },
+          { status: 501 },
+        )
+      },
+    },
+
+    "/api/agents/:id/inbox": {
+      GET: (req: Request & { params: { id: string } }) => {
+        const state = getAgentOrFail(req.params.id)
+        if (!state) return Response.json({ error: "Agent not found" }, { status: 404 })
+
+        const letters = state.stores.letters.getInbox().map((l) => ({
           id: l.id,
           content: l.content,
           sentAt: l.sentAt.toISOString(),
@@ -54,12 +136,16 @@ export function createRoutes(state: {
         }))
         return Response.json({ letters })
       },
-      POST: async (req: Request) => {
+
+      POST: async (req: Request & { params: { id: string } }) => {
+        const state = getAgentOrFail(req.params.id)
+        if (!state) return Response.json({ error: "Agent not found" }, { status: 404 })
+
         const body = (await req.json()) as { content: string }
         if (!body.content || body.content.trim().length === 0) {
           return Response.json({ error: "Content is required" }, { status: 400 })
         }
-        const letter = stores.letters.addInbound(body.content.trim())
+        const letter = state.stores.letters.addInbound(body.content.trim())
         return Response.json({
           id: letter.id,
           sentAt: letter.sentAt.toISOString(),
@@ -67,9 +153,12 @@ export function createRoutes(state: {
       },
     },
 
-    "/api/outbox": {
-      GET: () => {
-        const letters = stores.letters.getOutbox().map((l) => ({
+    "/api/agents/:id/outbox": {
+      GET: (req: Request & { params: { id: string } }) => {
+        const state = getAgentOrFail(req.params.id)
+        if (!state) return Response.json({ error: "Agent not found" }, { status: 404 })
+
+        const letters = state.stores.letters.getOutbox().map((l) => ({
           id: l.id,
           content: l.content,
           sentAt: l.sentAt.toISOString(),
@@ -79,9 +168,12 @@ export function createRoutes(state: {
       },
     },
 
-    "/api/outbox/:id/pickup": {
-      POST: (req: Request & { params: { id: string } }) => {
-        const letter = stores.letters.markOutboundPickedUp(req.params.id)
+    "/api/agents/:id/outbox/:letterId/pickup": {
+      POST: (req: Request & { params: { id: string; letterId: string } }) => {
+        const state = getAgentOrFail(req.params.id)
+        if (!state) return Response.json({ error: "Agent not found" }, { status: 404 })
+
+        const letter = state.stores.letters.markOutboundPickedUp(req.params.letterId)
         if (!letter) {
           return Response.json({ error: "Letter not found" }, { status: 404 })
         }
@@ -92,9 +184,12 @@ export function createRoutes(state: {
       },
     },
 
-    "/api/sessions": {
-      GET: async () => {
-        const sessions = await stores.sessions.listSessions()
+    "/api/agents/:id/sessions": {
+      GET: async (req: Request & { params: { id: string } }) => {
+        const state = getAgentOrFail(req.params.id)
+        if (!state) return Response.json({ error: "Agent not found" }, { status: 404 })
+
+        const sessions = await state.stores.sessions.listSessions()
         return Response.json({
           sessions: sessions.map((s) => ({
             id: s.sessionId,
@@ -108,19 +203,22 @@ export function createRoutes(state: {
       },
     },
 
-    "/api/sessions/:id": {
-      GET: async (req: Request & { params: { id: string } }) => {
-        const sessionId = parseInt(req.params.id, 10)
+    "/api/agents/:id/sessions/:sid": {
+      GET: async (req: Request & { params: { id: string; sid: string } }) => {
+        const state = getAgentOrFail(req.params.id)
+        if (!state) return Response.json({ error: "Agent not found" }, { status: 404 })
+
+        const sessionId = parseInt(req.params.sid, 10)
         if (isNaN(sessionId)) {
           return Response.json({ error: "Invalid session ID" }, { status: 400 })
         }
 
-        const sessionInfo = await stores.sessions.getSessionInfo(sessionId)
+        const sessionInfo = await state.stores.sessions.getSessionInfo(sessionId)
         if (!sessionInfo) {
           return Response.json({ error: "Session not found" }, { status: 404 })
         }
 
-        const transcript = await stores.sessions.getFullTranscript(sessionId)
+        const transcript = await state.stores.sessions.getFullTranscript(sessionId)
 
         return Response.json({
           id: sessionInfo.sessionId,
@@ -146,9 +244,12 @@ export function createRoutes(state: {
       },
     },
 
-    "/api/sessions/:id/context/:messageId": {
-      GET: async (req: Request & { params: { id: string; messageId: string } }) => {
-        const sessionId = parseInt(req.params.id, 10)
+    "/api/agents/:id/sessions/:sid/context/:messageId": {
+      GET: async (req: Request & { params: { id: string; sid: string; messageId: string } }) => {
+        const state = getAgentOrFail(req.params.id)
+        if (!state) return Response.json({ error: "Agent not found" }, { status: 404 })
+
+        const sessionId = parseInt(req.params.sid, 10)
         const messageId = parseInt(req.params.messageId, 10)
         if (isNaN(sessionId) || isNaN(messageId)) {
           return Response.json({ error: "Invalid session ID or message ID" }, { status: 400 })
@@ -160,15 +261,15 @@ export function createRoutes(state: {
           return Response.json({ error: "Invalid view parameter. Use 'context' or 'raw'" }, { status: 400 })
         }
 
-        const sessionInfo = await stores.sessions.getSessionInfo(sessionId)
+        const sessionInfo = await state.stores.sessions.getSessionInfo(sessionId)
         if (!sessionInfo) {
           return Response.json({ error: "Session not found" }, { status: 404 })
         }
 
         const rows =
           view === "context"
-            ? await stores.sessions.getContextUpTo(sessionId, messageId)
-            : await stores.sessions.getRawTranscriptUpTo(sessionId, messageId)
+            ? await state.stores.sessions.getContextUpTo(sessionId, messageId)
+            : await state.stores.sessions.getRawTranscriptUpTo(sessionId, messageId)
 
         if (rows.length === 0) {
           return Response.json({ error: "Message not found in session" }, { status: 404 })
@@ -205,7 +306,6 @@ export function createRoutes(state: {
 
 /**
  * Rough token estimate: ~4 characters per token for English text.
- * Counts content strings and JSON-serialized tool calls.
  */
 function estimateTokens(messages: Record<string, unknown>[]): number {
   let chars = 0
@@ -238,14 +338,12 @@ function formatMessage(row: TranscriptRow): Record<string, unknown> {
  * DECAY_STUB_THRESHOLD are replaced with stubs.
  */
 function applyDecay(rows: TranscriptRow[]): Record<string, unknown>[] {
-  // Determine the current turn from the last message's turn_sequence
   if (rows.length === 0) return []
   const lastRow = rows[rows.length - 1]
   if (!lastRow) return []
   const currentTurn = lastRow.turnSequence ?? 0
   const cutoff = currentTurn - DECAY_TURN_WINDOW
 
-  // Build a map of tool_call_id → tool name from assistant messages
   const toolNameMap = new Map<string, string>()
   for (const row of rows) {
     if (row.role === "assistant" && row.toolCalls) {

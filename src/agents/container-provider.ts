@@ -11,7 +11,15 @@ export interface ContainerInfo {
   status: "running" | "stopped"
 }
 
+type SpawnFn = typeof Bun.spawn
+
 export class ContainerProvider {
+  private spawn: SpawnFn
+
+  constructor(spawn: SpawnFn = Bun.spawn) {
+    this.spawn = spawn
+  }
+
   /**
    * Create a new container for an agent.
    * Returns the container ID.
@@ -100,7 +108,7 @@ export class ContainerProvider {
 
   /** Run a docker CLI command. Throws on non-zero exit. */
   private async run(command: string) {
-    const proc = Bun.spawn(["bash", "-c", command], {
+    const proc = this.spawn(["bash", "-c", command], {
       stdout: "pipe",
       stderr: "pipe",
       timeout: 30_000,

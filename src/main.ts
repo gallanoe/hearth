@@ -1,17 +1,7 @@
 import { OpenRouterProviderV2 } from "./llm/openrouter"
-import { initializeRooms } from "./rooms"
-import { RoomRegistry } from "./rooms/registry"
 import { runMigrations, isDatabaseAvailable } from "./data/db"
 import { startServer } from "./server"
-import { LetterStore } from "./data/letters"
-import { PersonaStore } from "./data/persona"
-import { RoomDecorationStore } from "./data/decorations"
-import { ReflectionStore } from "./data/reflections"
-import { BookStore } from "./data/books"
-import { SessionStore } from "./data/sessions"
-import { MemoryStore } from "./data/memories"
-import { PlanStore } from "./data/plans"
-import type { AgentStores } from "./types/rooms"
+import { AgentManager } from "./agents"
 
 // Initialize on startup
 const apiKey = Bun.env.OPENROUTER_API_KEY
@@ -32,24 +22,9 @@ if (isDatabaseAvailable()) {
   await runMigrations()
 }
 
-// Create default agent stores
-const agentId = "default"
-const stores: AgentStores = {
-  letters: new LetterStore(),
-  persona: new PersonaStore(),
-  decorations: new RoomDecorationStore(),
-  reflections: new ReflectionStore(),
-  books: new BookStore(),
-  sessions: new SessionStore(agentId),
-  memories: new MemoryStore(agentId),
-  plans: new PlanStore(agentId),
-}
-
-// Create room registry with decoration store
-const registry = new RoomRegistry(stores.decorations)
-
-// Initialize rooms (async for book loading)
-await initializeRooms(registry, stores.books)
+// Create agent manager and default agent
+const manager = new AgentManager()
+await manager.createAgent("default")
 
 // Start HTTP server
-startServer(llm, stores, registry)
+startServer(llm, manager)

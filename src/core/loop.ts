@@ -1,7 +1,6 @@
 import type { LLMProvider, Message, ToolCall } from "../types/llm"
-import type { AgentContext, AgentStores, ToolResult } from "../types/rooms"
-import { LocalWorkspace, type Workspace } from "../workspace"
-import type { RoomRegistry } from "../rooms/registry"
+import type { AgentContext, ToolResult } from "../types/rooms"
+import type { AgentState } from "../agents/state"
 import { BudgetTracker, type BudgetConfig } from "./budget"
 import {
   buildSystemPrompt,
@@ -12,7 +11,6 @@ import {
 } from "./context"
 import { shouldCompact, compactMessages } from "./compaction"
 import { decayToolResults } from "./decay"
-import { WORKSPACE_ROOT } from "../config"
 
 /**
  * Configuration for running a session.
@@ -23,8 +21,6 @@ export interface SessionConfig {
   reflections: string[] // Relevant past reflections
   inboxCount: number
   previousSessionSummary: string | null // Summary of the previous session
-  agentId?: string // Defaults to "default"
-  workspace?: Workspace // Defaults to LocalWorkspace(WORKSPACE_ROOT)
 }
 
 /**
@@ -57,15 +53,14 @@ export interface TurnRecord {
  * Runs a single session in the agent's life.
  * @param llm - The LLM provider to use
  * @param config - Session configuration
- * @param stores - All agent stores (per-agent instances)
- * @param registry - Room registry
+ * @param agentState - Per-agent state (stores, workspace, registry)
  */
 export async function runSession(
   llm: LLMProvider,
   config: SessionConfig,
-  stores: AgentStores,
-  registry: RoomRegistry
+  agentState: AgentState
 ): Promise<SessionResult> {
+  const { stores, roomRegistry: registry } = agentState
   const budget = new BudgetTracker(config.budget)
   const turns: TurnRecord[] = []
   let turnSequence = 0
@@ -89,10 +84,9 @@ export async function runSession(
   }
 
   // Initialize agent context
-  const workspace = config.workspace ?? new LocalWorkspace(WORKSPACE_ROOT)
   const context: AgentContext = {
-    agentId: config.agentId ?? "default",
-    workspace,
+    agentId: agentState.agentId,
+    workspace: agentState.workspace,
     stores,
     currentRoom: "bedroom",
     currentSession: config.sessionNumber,

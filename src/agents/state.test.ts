@@ -11,7 +11,7 @@ import { ReflectionStore } from "../data/reflections"
 import { BookStore } from "../data/books"
 import { SessionStore } from "../data/sessions"
 import { MemoryStore } from "../data/memories"
-import { PlanStore } from "../data/plans"
+import { TodoStore } from "../data/todos"
 import { RoomRegistry } from "../rooms/registry"
 
 describe("createAgentState", () => {
@@ -43,7 +43,7 @@ describe("createAgentState", () => {
     expect(state.stores.books).toBeInstanceOf(BookStore)
     expect(state.stores.sessions).toBeInstanceOf(SessionStore)
     expect(state.stores.memories).toBeInstanceOf(MemoryStore)
-    expect(state.stores.plans).toBeInstanceOf(PlanStore)
+    expect(state.stores.todos).toBeInstanceOf(TodoStore)
 
     await rm(tmpDir, { recursive: true, force: true })
   })

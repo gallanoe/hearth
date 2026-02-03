@@ -15,8 +15,7 @@ export interface WakeUpContext {
   inboxCount: number // Unread messages
   previousSessionSummary: string | null // Summary of the previous session
   memoryCount: number // Number of stored memories
-  openPlanCount: number // Number of open plans
-  activePlanTitle: string | null // Title of the active plan, if any
+  pendingTodoCount: number // Number of pending todos
 }
 
 /**
@@ -106,15 +105,11 @@ export function buildWakeUpMessage(context: WakeUpContext, decorations: RoomDeco
     parts.push(`${context.memoryCount} stored ${plural}. Use recall to search them.`)
   }
 
-  // Plan status
-  if (context.openPlanCount > 0) {
+  // Todo status
+  if (context.pendingTodoCount > 0) {
     parts.push("")
-    const plural = context.openPlanCount === 1 ? "plan" : "plans"
-    if (context.activePlanTitle) {
-      parts.push(`${context.openPlanCount} open ${plural}. Active: "${context.activePlanTitle}".`)
-    } else {
-      parts.push(`${context.openPlanCount} open ${plural}.`)
-    }
+    const plural = context.pendingTodoCount === 1 ? "todo" : "todos"
+    parts.push(`${context.pendingTodoCount} pending ${plural}.`)
   }
 
   return parts.join("\n")
@@ -148,7 +143,7 @@ export function buildRoomEntryMessage(room: Room, decorations: RoomDecorationSto
   parts.push("- remember: Store something in long-term memory.")
   parts.push("- recall: Search your memories and past sessions.")
   parts.push("- forget: Remove a memory by ID.")
-  parts.push("- plans: Create, view, and update plans that persist across sessions.")
+  parts.push("- todo: Create, view, and update todos that persist across sessions.")
 
   return parts.join("\n")
 }

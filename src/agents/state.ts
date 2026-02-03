@@ -8,7 +8,8 @@ import { ReflectionStore } from "../data/reflections"
 import { BookStore } from "../data/books"
 import { SessionStore } from "../data/sessions"
 import { MemoryStore } from "../data/memories"
-import { PlanStore } from "../data/plans"
+import { TodoStore } from "../data/todos"
+import { sql } from "../data/db"
 import { initializeRooms } from "../rooms"
 
 export interface AgentState {
@@ -34,7 +35,7 @@ export async function createAgentState(
     books: new BookStore(),
     sessions: new SessionStore(agentId),
     memories: new MemoryStore(agentId),
-    plans: new PlanStore(agentId),
+    todos: new TodoStore(sql, agentId),
   }
 
   const roomRegistry = new RoomRegistry(stores.decorations)

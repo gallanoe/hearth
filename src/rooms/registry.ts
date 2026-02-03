@@ -6,7 +6,7 @@ import { createMoveTo } from "../tools/navigation"
 import { readInbox, sendMessage } from "../tools/communication"
 import { createDecorateRoom } from "../tools/decorations"
 import { remember, recall, forget } from "../tools/memory"
-import { plans } from "../tools/planner"
+import { todo } from "../tools/todo"
 
 /**
  * Registry for all rooms in the house.
@@ -26,7 +26,7 @@ export class RoomRegistry {
       remember,
       recall,
       forget,
-      plans,
+      todo,
     }
   }
 
@@ -110,7 +110,7 @@ export class RoomRegistry {
       this.universalTools.remember,
       this.universalTools.recall,
       this.universalTools.forget,
-      this.universalTools.plans,
+      this.universalTools.todo,
     ]
 
     return allTools.map((tool) => ({
@@ -132,7 +132,7 @@ export class RoomRegistry {
     if (toolName === "remember") return this.universalTools.remember
     if (toolName === "recall") return this.universalTools.recall
     if (toolName === "forget") return this.universalTools.forget
-    if (toolName === "plans") return this.universalTools.plans
+    if (toolName === "todo") return this.universalTools.todo
 
     // Check room-specific tools
     const room = this.rooms.get(roomId)

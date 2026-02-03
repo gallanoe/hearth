@@ -10,7 +10,7 @@ import { ReflectionStore } from "./data/reflections"
 import { BookStore } from "./data/books"
 import { SessionStore } from "./data/sessions"
 import { MemoryStore } from "./data/memories"
-import { PlanStore } from "./data/plans"
+import { TodoStore } from "./data/todos"
 
 /**
  * A no-op workspace stub for tests that don't exercise workspace operations.
@@ -50,7 +50,7 @@ export function makeTestStores(overrides: Partial<AgentStores> = {}): AgentStore
     books: new BookStore(),
     sessions: new SessionStore("test"),
     memories: new MemoryStore("test"),
-    plans: new PlanStore("test"),
+    todos: new TodoStore(null, "test"),
     ...overrides,
   }
 }

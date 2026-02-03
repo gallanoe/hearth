@@ -7,7 +7,7 @@ import type { ReflectionStore } from "../data/reflections"
 import type { BookStore } from "../data/books"
 import type { SessionStore } from "../data/sessions"
 import type { MemoryStore } from "../data/memories"
-import type { PlanStore } from "../data/plans"
+import type { TodoStore } from "../data/todos"
 
 /**
  * All stores an agent needs, keyed for easy access.
@@ -20,7 +20,7 @@ export interface AgentStores {
   books: BookStore
   sessions: SessionStore
   memories: MemoryStore
-  plans: PlanStore
+  todos: TodoStore
 }
 
 /**
@@ -104,5 +104,5 @@ export interface UniversalTools {
   remember: ExecutableTool
   recall: ExecutableTool
   forget: ExecutableTool
-  plans: ExecutableTool
+  todo: ExecutableTool
 }

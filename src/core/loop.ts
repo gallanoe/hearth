@@ -102,8 +102,7 @@ export async function runSession(
   // Wake up message
   const startRoom = registry.get("bedroom")!
   const memoryCount = await stores.memories.getCount()
-  const openPlanCount = await stores.plans.getOpenCount()
-  const activePlan = await stores.plans.getActive()
+  const pendingTodoCount = await stores.todos.getPendingCount()
   const wakeUpContext: WakeUpContext = {
     session: config.sessionNumber,
     budget: budget.getState(),
@@ -112,8 +111,7 @@ export async function runSession(
     inboxCount: config.inboxCount,
     previousSessionSummary: config.previousSessionSummary,
     memoryCount,
-    openPlanCount,
-    activePlanTitle: activePlan?.title ?? null,
+    pendingTodoCount,
   }
 
   const wakeUpMessage: Message = {

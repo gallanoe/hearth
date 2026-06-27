@@ -12,7 +12,13 @@ import {
 } from "./context"
 import { shouldCompact, compactMessages } from "./compaction"
 import { decayToolResults } from "./decay"
-import { withSessionTrace, type SessionTraceHandle } from "../observability/traced-provider"
+import {
+  withSessionTrace,
+  withTurnSpan,
+  withToolSpan,
+  type SessionTraceHandle,
+  type TurnSpanHandle,
+} from "../observability/traced-provider"
 
 /**
  * Configuration for running a session.
@@ -140,10 +146,11 @@ async function runSessionInner(
   console.log(`\n☀️  Session ${config.sessionNumber} begins`)
   console.log(`📍 Bedroom`)
 
-  // Main loop
-  while (!budget.isExhausted() && !context.signals.requestedSleep) {
-    turnSequence++
-
+  // One turn: an LLM completion plus any tool executions it triggers. Wrapped in
+  // a turn span by the main loop below so the completion and tool calls nest under
+  // it in traces instead of each turn being a single opaque leaf. Defined as a
+  // closure so it shares the loop's mutable state (messages, budget, context, …).
+  const runTurn = async (turnSpan: TurnSpanHandle): Promise<void> => {
     // The fixed, room-independent tool set (dispatch wrappers + universal tools).
     // Stable across rooms, so a transition never invalidates the prompt cache.
     const tools = registry.getStaticToolDefinitions()
@@ -157,7 +164,7 @@ async function runSessionInner(
     // current room, so traces show both the room-independent superset we send and
     // what the current room actually contributed.
     const response = await llm.send(systemPrompt, messages, tools, {
-      name: "turn",
+      name: "completion",
       metadata: {
         turn: turnSequence,
         room: context.currentRoom,
@@ -257,51 +264,68 @@ async function runSessionInner(
 
       // Execute each tool
       for (const toolCall of response.toolCalls) {
-        const tool = registry.getExecutableTool(context.currentRoom, toolCall.name)
-
-        let result: ToolResult
-        if (!tool) {
-          // The full tool set is advertised to the LLM regardless of room (for
-          // prompt-cache stability), so an unresolved tool here is either out of
-          // scope — defined in another room — or genuinely unknown. Tell the
-          // agent which, and where to go if it's just in the wrong room.
-          const elsewhere = registry.getRoomsForTool(toolCall.name)
-          const here = registry.get(context.currentRoom)?.name ?? context.currentRoom
-          result = {
-            success: false,
-            output:
-              elsewhere.length > 0
-                ? `The "${toolCall.name}" tool isn't available in the ${here}. It's available in: ${elsewhere.join(", ")}. Use move_to to go there first.`
-                : `Unknown tool: ${toolCall.name}`,
-          }
-        } else {
-          // Validate args against the tool's input schema
-          const parsed = tool.inputSchema.safeParse(toolCall.args)
-          if (!parsed.success) {
-            const errors = parsed.error.issues.map((i) => `${i.path.join(".")}: ${i.message}`).join("; ")
-            result = {
-              success: false,
-              output: `Invalid arguments for ${toolCall.name}: ${errors}`,
-            }
-            console.log(`\n🔧 ${toolCall.name} — validation failed: ${errors}`)
-          } else {
-            console.log(`\n🔧 ${toolCall.name}`)
-            result = await tool.execute(parsed.data, context)
-            console.log(`   ${result.output.slice(0, 80)}${result.output.length > 250 ? "..." : ""}`)
-          }
-        }
-
-        turn.toolResults.push({ name: toolCall.name, result })
-
-        // For an execute_room_tool envelope, persistence + decay should reflect the
-        // inner room tool, not the wrapper: honor its persistResult flag and label
-        // stubs/placeholders with its real name.
+        // For an execute_room_tool envelope, persistence + decay + the trace span
+        // should reflect the inner room tool, not the wrapper: honor its persist
+        // flags and label stubs/spans with its real name.
         const persistenceTool = registry.getToolForPersistence(
           context.currentRoom,
           toolCall.name,
           toolCall.args
         )
         const effectiveName = persistenceTool?.name ?? toolCall.name
+
+        // Keep opted-out tool I/O out of traces too, mirroring DB redaction.
+        const tracedInput = persistenceTool?.persistInput === false ? "[redacted]" : toolCall.args
+
+        const result = await withToolSpan(
+          { name: effectiveName, input: tracedInput, metadata: { call: toolCall.name } },
+          async (toolSpan): Promise<ToolResult> => {
+            const tool = registry.getExecutableTool(context.currentRoom, toolCall.name)
+
+            let r: ToolResult
+            if (!tool) {
+              // The full tool set is advertised to the LLM regardless of room (for
+              // prompt-cache stability), so an unresolved tool here is either out of
+              // scope — defined in another room — or genuinely unknown. Tell the
+              // agent which, and where to go if it's just in the wrong room.
+              const elsewhere = registry.getRoomsForTool(toolCall.name)
+              const here = registry.get(context.currentRoom)?.name ?? context.currentRoom
+              r = {
+                success: false,
+                output:
+                  elsewhere.length > 0
+                    ? `The "${toolCall.name}" tool isn't available in the ${here}. It's available in: ${elsewhere.join(", ")}. Use move_to to go there first.`
+                    : `Unknown tool: ${toolCall.name}`,
+              }
+            } else {
+              // Validate args against the tool's input schema
+              const parsed = tool.inputSchema.safeParse(toolCall.args)
+              if (!parsed.success) {
+                const errors = parsed.error.issues.map((i) => `${i.path.join(".")}: ${i.message}`).join("; ")
+                r = {
+                  success: false,
+                  output: `Invalid arguments for ${toolCall.name}: ${errors}`,
+                }
+                console.log(`\n🔧 ${toolCall.name} — validation failed: ${errors}`)
+              } else {
+                console.log(`\n🔧 ${toolCall.name}`)
+                r = await tool.execute(parsed.data, context)
+                console.log(`   ${r.output.slice(0, 80)}${r.output.length > 250 ? "..." : ""}`)
+              }
+            }
+
+            // Record on the span, honoring the inner tool's result-persistence opt-out.
+            if (!r.success) toolSpan.setError(r.output)
+            toolSpan.setOutput(
+              persistenceTool?.persistResult === false
+                ? `[${effectiveName}: ${r.output.length} chars, not traced]`
+                : r.output
+            )
+            return r
+          }
+        )
+
+        turn.toolResults.push({ name: toolCall.name, result })
 
         // Add tool result message
         const toolResultMessage: Message = {
@@ -437,6 +461,14 @@ async function runSessionInner(
     console.log(`   Context: ${messages.length} messages, ~${messages.reduce((acc, msg) => acc + (msg.content?.length ?? 0) / 4, 0)} tokens`)
     console.log(`   Budget: ${budgetState.remaining.toLocaleString()} tokens / ${budgetState.total.toLocaleString()} tokens (${budgetPercent}%)${totalCostStr}`)
 
+    // Summarize the turn on its span for at-a-glance reading in traces.
+    turnSpan.setOutput({
+      content: turn.assistantMessage,
+      toolsCalled: turn.toolResults.map((r) => r.name),
+      inputTokens: turn.inputTokens,
+      outputTokens: turn.outputTokens,
+    })
+
     turns.push(turn)
 
     // Record turn in database
@@ -448,6 +480,13 @@ async function runSessionInner(
 
     // Decay stale tool results to reduce context size on subsequent turns
     decayToolResults(messages, turnSequence)
+  }
+
+  // Main loop. Each turn runs inside its own span so the LLM completion and the
+  // tool executions it triggers appear nested beneath it.
+  while (!budget.isExhausted() && !context.signals.requestedSleep) {
+    turnSequence++
+    await withTurnSpan({ turn: turnSequence, room: context.currentRoom }, runTurn)
   }
 
   // Determine end reason

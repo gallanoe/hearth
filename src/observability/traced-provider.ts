@@ -85,6 +85,60 @@ export class TracedProvider implements LLMProvider {
   }
 }
 
+/** Handle for the per-turn span. */
+export interface TurnSpanHandle {
+  setOutput(output: unknown): void
+  setMetadata(metadata: Record<string, unknown>): void
+}
+
+/**
+ * Wrap one agent turn in a span. Because the span is made active for the duration
+ * of `fn`, the llm.send generation and the tool-execution spans created while it
+ * runs auto-nest beneath it — so a turn reads as `completion → tool, tool, …`
+ * rather than a single opaque "turn" leaf. No-op span when tracing is disabled.
+ */
+export async function withTurnSpan<T>(
+  meta: { turn: number; room: string },
+  fn: (span: TurnSpanHandle) => Promise<T>,
+): Promise<T> {
+  return startActiveObservation("turn", async (span) => {
+    span.update({ metadata: { turn: meta.turn, room: meta.room } })
+    return fn({
+      setOutput: (output) => span.update({ output }),
+      setMetadata: (metadata) => span.update({ metadata }),
+    })
+  })
+}
+
+/** Handle for a single tool-execution span. */
+export interface ToolSpanHandle {
+  setOutput(output: unknown): void
+  /** Mark the span failed with a message (the tool returned success: false). */
+  setError(message: string): void
+}
+
+/**
+ * Wrap a single tool execution in a `tool`-type observation, nested under the
+ * active turn span. `input`/`output` must be redaction-adjusted by the caller so
+ * tools that opt out of persistence don't leak into traces either.
+ */
+export async function withToolSpan<T>(
+  meta: { name: string; input?: unknown; metadata?: Record<string, unknown> },
+  fn: (span: ToolSpanHandle) => Promise<T>,
+): Promise<T> {
+  return startActiveObservation(
+    `tool: ${meta.name}`,
+    async (span) => {
+      span.update({ input: meta.input, ...(meta.metadata ? { metadata: meta.metadata } : {}) })
+      return fn({
+        setOutput: (output) => span.update({ output }),
+        setError: (message) => span.update({ level: "ERROR", statusMessage: message }),
+      })
+    },
+    { asType: "tool" },
+  )
+}
+
 /** Handle passed to a session body for setting the trace's final output/metadata. */
 export interface SessionTraceHandle {
   setOutput(output: unknown): void

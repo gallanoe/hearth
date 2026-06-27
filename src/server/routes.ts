@@ -1,8 +1,9 @@
 import type { LLMProvider } from "../types/llm"
 import type { AgentManager } from "../agents/manager"
-import type { TranscriptRow } from "../data/sessions"
+import type { SessionInfo, TranscriptRow } from "../data/sessions"
 import { runSession, type SessionConfig } from "../core/loop"
 import { DEFAULT_BUDGET, DECAY_TURN_WINDOW, DECAY_STUB_THRESHOLD } from "../config"
+import { agentBus, type AgentEvent, type SerializedMessage } from "../events/agent-bus"
 
 /**
  * Creates all API route handlers for the multi-agent API.
@@ -300,7 +301,178 @@ export function createRoutes(llm: LLMProvider, manager: AgentManager) {
       },
     },
 
+    "/api/agents/:id/events": {
+      GET: (req: Request & { params: { id: string } }) => {
+        const agentId = req.params.id
+        const state = manager.getState(agentId)
+        if (!state) return Response.json({ error: "Agent not found" }, { status: 404 })
+
+        const sessions = state.stores.sessions
+        const encoder = new TextEncoder()
+
+        // Resume point: browsers send Last-Event-ID automatically on reconnect.
+        // A ?lastEventId= query param is accepted as a manual-testing fallback.
+        const url = new URL(req.url)
+        const rawLastId =
+          req.headers.get("Last-Event-ID") ?? url.searchParams.get("lastEventId")
+        const parsedLastId = rawLastId != null ? parseInt(rawLastId, 10) : NaN
+        const lastEventId = Number.isFinite(parsedLastId) ? parsedLastId : null
+
+        // Assigned inside start(); referenced by cancel() and on enqueue errors.
+        let cleanup = () => {}
+
+        const stream = new ReadableStream<Uint8Array>({
+          async start(controller) {
+            let closed = false
+            let cursor = lastEventId ?? 0
+            let catchingUp = true
+            const buffered: AgentEvent[] = []
+            let heartbeat: ReturnType<typeof setInterval> | null = null
+
+            function send(chunk: string) {
+              if (closed) return
+              try {
+                controller.enqueue(encoder.encode(chunk))
+              } catch {
+                cleanup()
+              }
+            }
+
+            function writeEvent(event: AgentEvent) {
+              if (event.type === "message") {
+                if (event.message.id <= cursor) return // already delivered
+                cursor = event.message.id
+                send(
+                  `id: ${event.message.id}\nevent: message\ndata: ${JSON.stringify(event.message)}\n\n`,
+                )
+              } else {
+                // Status carries no id, so Last-Event-ID stays pinned to messages.
+                send(
+                  `event: status\ndata: ${JSON.stringify({ status: event.status, endReason: event.endReason ?? null })}\n\n`,
+                )
+              }
+            }
+
+            // Subscribe BEFORE reading the snapshot; buffer live events until
+            // catch-up is sent, so nothing slips through the gap.
+            const unsubscribe = agentBus.subscribe(agentId, (event) => {
+              if (catchingUp) buffered.push(event)
+              else writeEvent(event)
+            })
+
+            cleanup = () => {
+              if (closed) return
+              closed = true
+              unsubscribe()
+              if (heartbeat) clearInterval(heartbeat)
+              try {
+                controller.close()
+              } catch {
+                // already closed
+              }
+            }
+
+            req.signal.addEventListener("abort", cleanup)
+
+            // Do all async (DB) work first, then a synchronous tail so no live
+            // event can interleave between sending catch-up and flushing buffer.
+            try {
+              if (lastEventId == null) {
+                const all = await sessions.listSessions()
+                const latest = all[0] ?? null
+                const rows = latest
+                  ? await sessions.getFullTranscript(latest.sessionId)
+                  : []
+                const messages = rows.map(serializeMessageRow)
+                const snapshotCursor = messages.reduce(
+                  (max, m) => Math.max(max, m.id),
+                  0,
+                )
+                const snapshot = {
+                  status: manager.isRunning(agentId) ? "awake" : "asleep",
+                  session: latest ? serializeSession(latest) : null,
+                  messages,
+                }
+                // synchronous tail
+                if (snapshotCursor > 0) {
+                  cursor = snapshotCursor
+                  send(
+                    `id: ${snapshotCursor}\nevent: snapshot\ndata: ${JSON.stringify(snapshot)}\n\n`,
+                  )
+                } else {
+                  send(`event: snapshot\ndata: ${JSON.stringify(snapshot)}\n\n`)
+                }
+              } else {
+                const missed = await sessions.getMessagesAfter(lastEventId)
+                // synchronous tail
+                for (const row of missed) {
+                  writeEvent({ type: "message", message: serializeMessageRow(row) })
+                }
+                writeEvent({
+                  type: "status",
+                  status: manager.isRunning(agentId) ? "awake" : "asleep",
+                })
+              }
+
+              // Flush live events that arrived during catch-up, then go live.
+              for (const event of buffered) writeEvent(event)
+              buffered.length = 0
+              catchingUp = false
+            } catch (error) {
+              console.error("SSE catch-up failed:", error)
+            }
+
+            if (closed) return
+            heartbeat = setInterval(() => send(": ping\n\n"), 20_000)
+          },
+
+          cancel() {
+            cleanup()
+          },
+        })
+
+        return new Response(stream, {
+          headers: {
+            "Content-Type": "text/event-stream",
+            "Cache-Control": "no-cache",
+            Connection: "keep-alive",
+            // Disable proxy buffering (e.g. nginx) so events flush immediately.
+            "X-Accel-Buffering": "no",
+          },
+        })
+      },
+    },
+
     "/api/*": Response.json({ message: "Not found" }, { status: 404 }),
+  }
+}
+
+/** Serialize a transcript row for the SSE wire format. */
+function serializeMessageRow(row: TranscriptRow): SerializedMessage {
+  return {
+    id: row.messageId,
+    sessionId: row.sessionId,
+    sequenceNum: row.sequenceNum,
+    role: row.role,
+    content: row.content,
+    toolCalls: row.toolCalls,
+    toolCallId: row.toolCallId,
+    status: row.status,
+    room: row.room,
+    turnSequence: row.turnSequence,
+    createdAt: row.createdAt.toISOString(),
+  }
+}
+
+/** Serialize session info for the SSE snapshot (matches the REST shape). */
+function serializeSession(info: SessionInfo) {
+  return {
+    id: info.sessionId,
+    startedAt: info.startedAt.toISOString(),
+    endedAt: info.endedAt?.toISOString() ?? null,
+    endReason: info.endReason,
+    totalTokensUsed: info.totalTokensUsed,
+    sessionSummary: info.sessionSummary,
   }
 }
 

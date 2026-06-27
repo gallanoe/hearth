@@ -2,6 +2,7 @@ import { sql, isDatabaseAvailable } from "./db"
 import type { Message, ToolCall } from "../types/llm"
 import type { TurnRecord } from "../core/loop"
 import type { ToolResult } from "../types/rooms"
+import { agentBus } from "../events/agent-bus"
 
 /**
  * Session information returned from queries.
@@ -142,9 +143,29 @@ export class SessionStore {
           ${turnSequence ?? null},
           ${tokenCount ?? null}
         )
-        RETURNING message_id
+        RETURNING message_id, created_at
       `
-      return row.message_id as number
+      const messageId = row.message_id as number
+
+      // Publish to live subscribers (SSE). message_id is the monotonic cursor.
+      agentBus.publish(this.agentId, {
+        type: "message",
+        message: {
+          id: messageId,
+          sessionId,
+          sequenceNum: nextSeq,
+          role: message.role,
+          content: message.content ?? null,
+          toolCalls: message.toolCalls ?? null,
+          toolCallId: message.toolCallId ?? null,
+          status: "active",
+          room,
+          turnSequence: turnSequence ?? null,
+          createdAt: new Date(row.created_at as string).toISOString(),
+        },
+      })
+
+      return messageId
     } catch (error) {
       console.error("SessionStore.appendMessage failed:", error)
       return 0
@@ -172,7 +193,7 @@ export class SessionStore {
     if (!sql) return
 
     try {
-      await sql.begin(async (tx) => {
+      const summaryEvent = await sql.begin(async (tx) => {
         // 1. Insert compaction_events row
         const [compactionRow] = await tx`
           INSERT INTO compaction_events (
@@ -233,7 +254,7 @@ export class SessionStore {
             'active',
             ${summaryTokens}
           )
-          RETURNING message_id
+          RETURNING message_id, created_at
         `
         const summaryMessageId = messageRow.message_id as number
 
@@ -261,7 +282,34 @@ export class SessionStore {
             0
           )
         `
+
+        return {
+          id: summaryMessageId,
+          seq: nextSeq,
+          content: summaryContent,
+          createdAt: new Date(messageRow.created_at as string).toISOString(),
+        }
       })
+
+      // Publish the summary message to live subscribers after the tx commits.
+      if (summaryEvent) {
+        agentBus.publish(this.agentId, {
+          type: "message",
+          message: {
+            id: summaryEvent.id,
+            sessionId,
+            sequenceNum: summaryEvent.seq,
+            role: "user",
+            content: summaryEvent.content,
+            toolCalls: null,
+            toolCallId: null,
+            status: "active",
+            room: null,
+            turnSequence: null,
+            createdAt: summaryEvent.createdAt,
+          },
+        })
+      }
     } catch (error) {
       console.error("SessionStore.recordCompaction failed:", error)
     }
@@ -571,6 +619,48 @@ export class SessionStore {
       }))
     } catch (error) {
       console.error("SessionStore.getRawTranscriptUpTo failed:", error)
+      return []
+    }
+  }
+
+  /**
+   * Get this agent's messages with message_id greater than `messageId`,
+   * ordered by message_id. Used to replay events missed by an SSE client
+   * that reconnects with a Last-Event-ID. Spans sessions, since message_id
+   * is globally monotonic.
+   */
+  async getMessagesAfter(messageId: number): Promise<TranscriptRow[]> {
+    if (!sql) return []
+
+    try {
+      const rows = await sql`
+        SELECT
+          message_id, session_id, sequence_num, role, content,
+          tool_calls, tool_call_id, status, compaction_id,
+          room, turn_sequence, token_count, created_at
+        FROM messages
+        WHERE agent_id = ${this.agentId}
+          AND message_id > ${messageId}
+        ORDER BY message_id
+      `
+
+      return rows.map((row: Record<string, unknown>) => ({
+        messageId: row.message_id as number,
+        sessionId: row.session_id as number,
+        sequenceNum: row.sequence_num as number,
+        role: row.role as TranscriptRow["role"],
+        content: row.content as string | null,
+        toolCalls: row.tool_calls ? (JSON.parse(row.tool_calls as string) as ToolCall[]) : null,
+        toolCallId: row.tool_call_id as string | null,
+        status: row.status as "active" | "compacted",
+        compactionId: row.compaction_id as number | null,
+        room: row.room as string | null,
+        turnSequence: row.turn_sequence as number | null,
+        tokenCount: row.token_count as number | null,
+        createdAt: new Date(row.created_at as string),
+      }))
+    } catch (error) {
+      console.error("SessionStore.getMessagesAfter failed:", error)
       return []
     }
   }

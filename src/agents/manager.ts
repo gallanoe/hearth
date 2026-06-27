@@ -4,6 +4,7 @@ import { ContainerWorkspace } from "../workspace/container"
 import { LocalWorkspace } from "../workspace/local"
 import { USE_CONTAINERS, CONTAINER_IMAGE, WORKSPACE_ROOT } from "../config"
 import type { SessionResult } from "../core/loop"
+import { agentBus } from "../events/agent-bus"
 import { mkdir } from "node:fs/promises"
 
 interface ManagedAgent {
@@ -83,7 +84,15 @@ export class AgentManager {
 
   setRunning(agentId: string, running: boolean): void {
     const entry = this.agents.get(agentId)
-    if (entry) entry.isRunning = running
+    if (!entry) return
+    entry.isRunning = running
+
+    // Notify live subscribers (SSE) of the awake/asleep transition.
+    agentBus.publish(agentId, {
+      type: "status",
+      status: running ? "awake" : "asleep",
+      endReason: running ? null : (entry.lastResult?.endReason ?? null),
+    })
   }
 
   setLastResult(agentId: string, result: SessionResult): void {

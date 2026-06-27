@@ -1,0 +1,111 @@
+@import "tailwindcss";
+
+/* ── Hearth design tokens ─────────────────────────────────────────────────
+   See web/DESIGN.md for the full language. Color is a vital sign, not decor:
+   --ember = awake (warm firelight), --moon = asleep (cool, dim).            */
+@theme {
+  /* Neutrals — the house at night */
+  --color-base: #0a0a0b;
+  --color-surface: #141417;
+  --color-surface-2: #1c1c20;
+  --color-line: #2a2a30;
+  --color-text: #f4f3f1;
+  --color-muted: #9a9ca4;
+
+  /* Vital signs — the circadian pair */
+  --color-ember: #ff8a4c;
+  --color-ember-deep: #b5462a;
+  --color-moon: #7c89a6;
+
+  /* Two typographic worlds: the inhabitant (serif) and the instrument (sans/mono) */
+  --font-serif: "Newsreader Variable", ui-serif, Georgia, Cambria, serif;
+  --font-sans:
+    "Geist Variable", ui-sans-serif, system-ui, -apple-system, sans-serif;
+  --font-mono: "Geist Mono Variable", ui-monospace, "SFMono-Regular", monospace;
+
+  /* Disciplined radii */
+  --radius-control: 0.375rem; /* 6px — buttons, inputs */
+  --radius-panel: 0.5rem; /* 8px — cards, rails */
+}
+
+@layer base {
+  body {
+    background-color: var(--color-base);
+    color: var(--color-text);
+    font-family: var(--font-sans);
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+  }
+
+  /* Warm selection — a smudge of firelight */
+  ::selection {
+    background-color: color-mix(in oklab, var(--color-ember) 30%, transparent);
+  }
+
+  /* High-contrast, keyboard-visible focus */
+  :focus-visible {
+    outline: 2px solid var(--color-ember);
+    outline-offset: 2px;
+  }
+}
+
+/* ── Signature: circadian presence ────────────────────────────────────────
+   Awake surfaces carry warm firelight and a slow breath; asleep is cool and
+   still. Use sparingly — this is the one place we spend boldness.           */
+
+/* A soft radial firelight wash for awake / active surfaces */
+@utility hearth-glow {
+  background-image: radial-gradient(
+    120% 120% at 50% 0%,
+    color-mix(in oklab, var(--color-ember) 12%, transparent),
+    transparent 60%
+  );
+}
+
+/* Ember halo for the presence indicator */
+@utility glow-ember {
+  box-shadow:
+    0 0 4px 0 color-mix(in oklab, var(--color-ember) 70%, transparent),
+    0 0 18px -2px color-mix(in oklab, var(--color-ember) 55%, transparent);
+}
+
+@keyframes breathe {
+  0%,
+  100% {
+    opacity: 0.55;
+    transform: scale(0.92);
+  }
+  50% {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+/* The slow pulse of an awake agent — stilled when motion is reduced */
+@utility animate-breathe {
+  animation: breathe 4s ease-in-out infinite;
+  @media (prefers-reduced-motion: reduce) {
+    animation: none;
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@keyframes settle {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+/* A streamed message settling into place — like a thought arriving */
+@utility animate-settle {
+  animation: settle 180ms ease-out both;
+  @media (prefers-reduced-motion: reduce) {
+    animation: none;
+  }
+}

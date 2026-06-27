@@ -76,7 +76,8 @@ export async function compactMessages(
   const summaryResponse = await llm.send(
     SUMMARIZATION_PROMPT,
     [{ role: "user", content: formattedHistory }],
-    [] // No tools needed for summarization
+    [], // No tools needed for summarization
+    { name: "compaction" }
   )
 
   const summary = summaryResponse.content ?? "No summary generated."

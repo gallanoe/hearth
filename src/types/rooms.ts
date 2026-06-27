@@ -94,9 +94,16 @@ export function resolveDescription(description: string | (() => string)): string
 }
 
 /**
- * Universal tools available in all rooms.
+ * Static tools sent to the LLM in every room. This set never changes, so it
+ * keeps the prompt-cache prefix stable across room transitions. Room-specific
+ * tools are reached through {@link UniversalTools.executeRoomTool} rather than
+ * being advertised individually.
  */
 export interface UniversalTools {
+  /** Wrapper that dispatches to the current room's tools by name. */
+  executeRoomTool: ExecutableTool
+  /** Returns a single room tool's definition for on-demand discovery. */
+  getRoomToolDef: ExecutableTool
   moveTo: ExecutableTool
   readInbox: ExecutableTool
   sendMessage: ExecutableTool

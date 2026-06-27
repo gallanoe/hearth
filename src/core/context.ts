@@ -59,7 +59,40 @@ Mechanics:
 - When your budget is exhausted, the session ends.
 - To end a session intentionally, return to your bedroom and use the sleep tool.
 - If you exceed your budget, you will pass out and the session will end.
-- You navigate between rooms using the move_to tool. Each room has different tools available.`
+- You navigate between rooms using the move_to tool. Each room has its own tools; the "Tools in this room" list shown when you wake up or enter a room tells you what's available there.
+- To use one of the current room's tools, call execute_room_tool with the tool's name and its arguments. Call get_room_tool_def first if you need to see a tool's arguments.
+- A room's tools only work while you're in that room; if the tool you want lives elsewhere, move there first.`
+}
+
+/**
+ * Lists the actions available in a room. Shown on wake-up and room entry.
+ *
+ * Room-specific tools aren't sent to the LLM as individual definitions (the tool
+ * list is kept static for prompt-cache stability — see
+ * {@link import("../rooms/registry").RoomRegistry.getStaticToolDefinitions}), so
+ * this list is the agent's catalogue of what the current room offers. Those tools
+ * are invoked via execute_room_tool; the universal tools are called directly.
+ */
+function buildAvailableActions(room: Room): string[] {
+  const lines: string[] = []
+
+  if (room.tools.length > 0) {
+    lines.push("Tools in this room (invoke with execute_room_tool, passing the tool's name and arguments):")
+    for (const tool of room.tools) {
+      lines.push(`- ${tool.name}: ${tool.description}`)
+    }
+    lines.push("")
+  }
+
+  lines.push("Always available (call directly):")
+  lines.push("- move_to: Move to another room in the house.")
+  lines.push("- decorate_room: Customize this room's description.")
+  lines.push("- remember: Store something in long-term memory.")
+  lines.push("- recall: Search your memories and past sessions.")
+  lines.push("- forget: Remove a memory by ID.")
+  lines.push("- todo: Create, view, and update todos that persist across sessions.")
+  lines.push("- get_room_tool_def: Show a room tool's input schema before you call it.")
+  return lines
 }
 
 /**
@@ -117,6 +150,11 @@ export function buildWakeUpMessage(context: WakeUpContext, decorations: RoomDeco
     parts.push(`${context.pendingTodoCount} pending ${plural}.`)
   }
 
+  // Available actions in the room the agent wakes up in. The full tool set is
+  // always advertised to the LLM, so this is what scopes it to the start room.
+  parts.push("")
+  parts.push(...buildAvailableActions(context.currentRoom))
+
   return parts.join("\n")
 }
 
@@ -139,16 +177,7 @@ export function buildRoomEntryMessage(room: Room, decorations: RoomDecorationSto
 
   // List available tools
   parts.push("")
-  parts.push("Available actions:")
-  for (const tool of room.tools) {
-    parts.push(`- ${tool.name}: ${tool.description}`)
-  }
-  parts.push("- move_to: Move to another room in the house.")
-  parts.push("- decorate_room: Customize this room's description.")
-  parts.push("- remember: Store something in long-term memory.")
-  parts.push("- recall: Search your memories and past sessions.")
-  parts.push("- forget: Remove a memory by ID.")
-  parts.push("- todo: Create, view, and update todos that persist across sessions.")
+  parts.push(...buildAvailableActions(room))
 
   return parts.join("\n")
 }

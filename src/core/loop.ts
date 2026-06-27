@@ -144,17 +144,25 @@ async function runSessionInner(
   while (!budget.isExhausted() && !context.signals.requestedSleep) {
     turnSequence++
 
-    // Get available tools for current room
-    const tools = registry.getToolDefinitions(context.currentRoom)
+    // The fixed, room-independent tool set (dispatch wrappers + universal tools).
+    // Stable across rooms, so a transition never invalidates the prompt cache.
+    const tools = registry.getStaticToolDefinitions()
 
     // Static system prompt (cacheable). The live budget is injected at the tail
     // via trailingNote so it doesn't invalidate the cached prefix each turn.
     const systemPrompt = buildSystemPrompt(stores.persona)
 
-    // Call LLM
+    // Call LLM. `availableTools` (the full injected set) is recorded by the
+    // traced provider from `tools`; `roomTools` records the subset unique to the
+    // current room, so traces show both the room-independent superset we send and
+    // what the current room actually contributed.
     const response = await llm.send(systemPrompt, messages, tools, {
       name: "turn",
-      metadata: { turn: turnSequence, room: context.currentRoom },
+      metadata: {
+        turn: turnSequence,
+        room: context.currentRoom,
+        roomTools: registry.getRoomToolNames(context.currentRoom),
+      },
       trailingNote: buildBudgetNote(budget.getState()),
     })
 
@@ -231,9 +239,11 @@ async function runSessionInner(
       }
       messages.push(assistantMessage)
 
-      // Redact tool call args for tools that opt out of input persistence
+      // Redact tool call args for tools that opt out of input persistence. For an
+      // execute_room_tool envelope this resolves to the inner room tool, so its
+      // persistInput flag still applies even though the loop sees the wrapper.
       const redactedToolCalls = response.toolCalls.map((tc) => {
-        const t = registry.getExecutableTool(context.currentRoom, tc.name)
+        const t = registry.getToolForPersistence(context.currentRoom, tc.name, tc.args)
         if (t?.persistInput === false) {
           return { ...tc, args: { _redacted: true } }
         }
@@ -251,9 +261,18 @@ async function runSessionInner(
 
         let result: ToolResult
         if (!tool) {
+          // The full tool set is advertised to the LLM regardless of room (for
+          // prompt-cache stability), so an unresolved tool here is either out of
+          // scope — defined in another room — or genuinely unknown. Tell the
+          // agent which, and where to go if it's just in the wrong room.
+          const elsewhere = registry.getRoomsForTool(toolCall.name)
+          const here = registry.get(context.currentRoom)?.name ?? context.currentRoom
           result = {
             success: false,
-            output: `Unknown tool: ${toolCall.name}`,
+            output:
+              elsewhere.length > 0
+                ? `The "${toolCall.name}" tool isn't available in the ${here}. It's available in: ${elsewhere.join(", ")}. Use move_to to go there first.`
+                : `Unknown tool: ${toolCall.name}`,
           }
         } else {
           // Validate args against the tool's input schema
@@ -274,19 +293,29 @@ async function runSessionInner(
 
         turn.toolResults.push({ name: toolCall.name, result })
 
+        // For an execute_room_tool envelope, persistence + decay should reflect the
+        // inner room tool, not the wrapper: honor its persistResult flag and label
+        // stubs/placeholders with its real name.
+        const persistenceTool = registry.getToolForPersistence(
+          context.currentRoom,
+          toolCall.name,
+          toolCall.args
+        )
+        const effectiveName = persistenceTool?.name ?? toolCall.name
+
         // Add tool result message
         const toolResultMessage: Message = {
           role: "tool",
           content: result.output,
           toolCallId: toolCall.id,
-          decay: { turn: turnSequence, toolName: toolCall.name },
+          decay: { turn: turnSequence, toolName: effectiveName },
         }
         messages.push(toolResultMessage)
 
-        // Persist with redacted content if tool opts out of result persistence
-        if (tool?.persistResult === false) {
+        // Persist with redacted content if the tool opts out of result persistence
+        if (persistenceTool?.persistResult === false) {
           await persistMessage(
-            { ...toolResultMessage, content: `[${toolCall.name} result not persisted]` },
+            { ...toolResultMessage, content: `[${effectiveName} result not persisted]` },
             context.currentRoom,
             turnSequence
           )

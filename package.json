@@ -12,8 +12,11 @@
     "typescript": "^5"
   },
   "dependencies": {
+    "@langfuse/otel": "^5.9.0",
+    "@langfuse/tracing": "^5.9.0",
     "@mozilla/readability": "^0.6.0",
     "@openrouter/sdk": "^0.5.1",
+    "@opentelemetry/sdk-node": "^0.219.0",
     "jsdom": "^27.4.0",
     "turndown": "^7.2.2",
     "zod": "^4.3.6"

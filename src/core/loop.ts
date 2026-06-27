@@ -11,6 +11,7 @@ import {
 } from "./context"
 import { shouldCompact, compactMessages } from "./compaction"
 import { decayToolResults } from "./decay"
+import { withSessionTrace, type SessionTraceHandle } from "../observability/traced-provider"
 
 /**
  * Configuration for running a session.
@@ -59,6 +60,20 @@ export async function runSession(
   llm: LLMProvider,
   config: SessionConfig,
   agentState: AgentState
+): Promise<SessionResult> {
+  // Wrap the whole session in a Langfuse trace; every llm.send() below nests
+  // under it as a generation. No-op when tracing is disabled.
+  return withSessionTrace(
+    { agentId: agentState.agentId, sessionNumber: config.sessionNumber },
+    (trace) => runSessionInner(llm, config, agentState, trace)
+  )
+}
+
+async function runSessionInner(
+  llm: LLMProvider,
+  config: SessionConfig,
+  agentState: AgentState,
+  trace: SessionTraceHandle
 ): Promise<SessionResult> {
   const { stores, roomRegistry: registry } = agentState
   const budget = new BudgetTracker(config.budget)
@@ -135,7 +150,10 @@ export async function runSession(
     const systemPrompt = buildSystemPrompt(budget.getState(), stores.persona)
 
     // Call LLM
-    const response = await llm.send(systemPrompt, messages, tools)
+    const response = await llm.send(systemPrompt, messages, tools, {
+      name: "turn",
+      metadata: { turn: turnSequence, room: context.currentRoom },
+    })
 
     // Record usage
     budget.recordUsage(response.usage.inputTokens, response.usage.outputTokens, response.usage.cost)
@@ -416,8 +434,17 @@ export async function runSession(
     console.log(`   Summary: ${sessionSummary}`)
   }
 
-  // End session in database
+  // Record the session-level trace output.
   const finalState = budget.getState()
+  trace.setOutput({
+    endReason,
+    totalTokensUsed: finalState.spent,
+    totalCost: finalState.totalCost,
+    turns: turns.length,
+    sessionSummary,
+  })
+
+  // End session in database
   try {
     await stores.sessions.endSession(
       sessionId,
@@ -483,7 +510,8 @@ Be concise and factual. Write in second person ("You did X, then Y").`
     const response = await llm.send(
       "You are a helpful assistant that summarizes sessions concisely.",
       [{ role: "user", content: summaryPrompt }],
-      []
+      [],
+      { name: "session-summary" }
     )
     return response.content?.trim() ?? null
   } catch (error) {

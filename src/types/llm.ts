@@ -38,10 +38,19 @@ export interface LLMResponse {
   }
 }
 
+/** Optional per-call hints, currently used to label/annotate tracing spans. */
+export interface LLMCallOptions {
+  /** Generation name in tracing (e.g. "turn", "compaction", "session-summary"). */
+  name?: string
+  /** Extra metadata to attach to the generation. */
+  metadata?: Record<string, unknown>
+}
+
 export interface LLMProvider {
   send(
     system: string,
     messages: LLMMessage[],
-    tools?: ToolDefinition[]
+    tools?: ToolDefinition[],
+    opts?: LLMCallOptions
   ): Promise<LLMResponse>
 }

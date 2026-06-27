@@ -10,6 +10,11 @@ services:
       - USE_CONTAINERS=${USE_CONTAINERS:-false}
       - CONTAINER_IMAGE=${CONTAINER_IMAGE:-python:3.12-slim}
       - AGENT_WORKSPACE=${AGENT_WORKSPACE:-/home/agent}
+      # Langfuse: reach langfuse-web by service name over the shared network.
+      # Leave the keys blank to disable tracing (see src/observability).
+      - LANGFUSE_BASE_URL=${LANGFUSE_BASE_URL:-http://langfuse-web:3000}
+      - LANGFUSE_PUBLIC_KEY=${LANGFUSE_PUBLIC_KEY}
+      - LANGFUSE_SECRET_KEY=${LANGFUSE_SECRET_KEY}
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
     depends_on:
@@ -18,6 +23,7 @@ services:
     networks:
       - hearth-internal
       - hearth-external
+      - hearth-observability
   db:
     image: postgres:16-alpine
     environment:
@@ -39,5 +45,9 @@ volumes:
 
 networks:
   hearth-internal:
-    internal: true 
+    internal: true
   hearth-external:
+  # Shared with the Langfuse stack (docker-compose.langfuse.yml).
+  # Create once before `up`:  docker network create hearth-observability
+  hearth-observability:
+    external: true

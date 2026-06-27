@@ -32,9 +32,23 @@ export interface LLMResponse {
   toolCalls: ToolCall[]
   stopReason: "stop" | "tool_calls" | "length"
   usage: {
+    /** Total input/prompt tokens (includes any served from cache). */
     inputTokens: number
     outputTokens: number
     cost?: number
+    /** Portion of inputTokens served from the prompt cache — a cache hit/read. */
+    cacheReadTokens?: number
+    /** Portion of inputTokens written to the prompt cache this call — a cache miss/write. */
+    cacheWriteTokens?: number
+    /** Cost attributed to prompt/input tokens (sums with outputCost to `cost`). */
+    inputCost?: number
+    /** Cost attributed to completion/output tokens. */
+    outputCost?: number
+    /**
+     * Estimated $ saved (or lost, if negative) on this call's prompt by caching,
+     * vs. paying the base input rate for every token. Provider-agnostic.
+     */
+    cacheSavings?: number
   }
 }
 
@@ -44,6 +58,12 @@ export interface LLMCallOptions {
   name?: string
   /** Extra metadata to attach to the generation. */
   metadata?: Record<string, unknown>
+  /**
+   * Ephemeral text appended as a final user message, AFTER the cache breakpoint,
+   * so per-turn-volatile content (e.g. a live budget readout) doesn't invalidate
+   * the cached conversation prefix. Not persisted to the transcript.
+   */
+  trailingNote?: string
 }
 
 export interface LLMProvider {

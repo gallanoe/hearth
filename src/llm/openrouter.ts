@@ -4,8 +4,10 @@ import type {
   LLMProvider,
   LLMMessage,
   LLMResponse,
+  LLMCallOptions,
   ToolDefinition,
 } from "../types/llm"
+import { getPromptTokenPrice } from "./pricing"
 
 export interface OpenRouterConfig {
   apiKey: string
@@ -16,9 +18,21 @@ export interface OpenRouterConfig {
 }
 
 // Types for direct API approach
+
+/**
+ * A text content part. When `cache_control` is present, OpenRouter forwards it
+ * to Anthropic as a prompt-cache breakpoint: everything up to and including this
+ * block (in tools → system → messages order) is cached for ~5 minutes.
+ */
+interface OpenAIContentPart {
+  type: "text"
+  text: string
+  cache_control?: { type: "ephemeral" }
+}
+
 interface OpenAIChatMessage {
   role: "system" | "user" | "assistant" | "tool"
-  content: string | null
+  content: string | OpenAIContentPart[] | null
   tool_calls?: {
     id: string
     type: "function"
@@ -54,6 +68,18 @@ interface OpenAIResponse {
     prompt_tokens: number
     completion_tokens: number
     cost?: number
+    /** Breakdown of prompt_tokens by cache status (OpenAI-compatible shape). */
+    prompt_tokens_details?: {
+      /** Tokens served from cache (a cache hit / read). */
+      cached_tokens?: number
+      /** Tokens written to the cache this call (a cache miss that populated it). */
+      cache_write_tokens?: number
+    }
+    /** Cost split (returned when usage accounting is enabled). Sums to `cost`. */
+    cost_details?: {
+      upstream_inference_prompt_cost?: number
+      upstream_inference_completions_cost?: number
+    }
   }
 }
 
@@ -165,11 +191,20 @@ export class OpenRouterProviderV2 implements LLMProvider {
   async send(
     system: string,
     messages: LLMMessage[],
-    tools?: ToolDefinition[]
+    tools?: ToolDefinition[],
+    opts?: LLMCallOptions
   ): Promise<LLMResponse> {
-    // Build messages in OpenAI chat format
+    // Build messages in OpenAI chat format.
+    //
+    // Prompt caching: mark the system prompt as a cache breakpoint, which caches
+    // the static tools + system prefix (Anthropic's canonical order). We then add
+    // a second breakpoint at the tail of the conversation so the growing message
+    // history is read from cache on subsequent turns instead of re-sent in full.
     const chatMessages: OpenAIChatMessage[] = [
-      { role: "system", content: system },
+      {
+        role: "system",
+        content: [{ type: "text", text: system, cache_control: { type: "ephemeral" } }],
+      },
       ...messages.map((m): OpenAIChatMessage => {
         if (m.role === "tool") {
           return {
@@ -199,6 +234,29 @@ export class OpenRouterProviderV2 implements LLMProvider {
       }),
     ]
 
+    // Second cache breakpoint: the last message carrying plain text. This caches
+    // the conversation prefix so the next turn (whose prefix is identical) reads
+    // it from cache. Skipped for tool-call assistant turns whose content is null.
+    // Note: tool-result decay that rewrites earlier messages will invalidate this
+    // prefix; the system/tools breakpoint above is unaffected.
+    //
+    // Placed BEFORE appending the trailing note below, so the breakpoint lands on
+    // the last real (stable) message and the volatile note stays outside the cache.
+    for (let i = chatMessages.length - 1; i >= 1; i--) {
+      const msg = chatMessages[i]
+      if (msg && typeof msg.content === "string" && msg.content.length > 0) {
+        msg.content = [{ type: "text", text: msg.content, cache_control: { type: "ephemeral" } }]
+        break
+      }
+    }
+
+    // Ephemeral trailing note (e.g. live budget). Appended after the cache
+    // breakpoint with NO cache_control: it changes every turn, so keeping it at
+    // the tail means it never invalidates the cached prefix above.
+    if (opts?.trailingNote) {
+      chatMessages.push({ role: "user", content: opts.trailingNote })
+    }
+
     // Convert tool definitions to OpenAI format
     const openaiTools: OpenAITool[] | undefined = tools?.map((t) => ({
       type: "function" as const,
@@ -226,6 +284,11 @@ export class OpenRouterProviderV2 implements LLMProvider {
         provider: {
           sort: "throughput",
         },
+        // Opt into usage accounting so the response includes `cost` and
+        // `prompt_tokens_details.cached_tokens` (the cache-hit measurement).
+        usage: {
+          include: true,
+        },
       }),
     })
 
@@ -241,6 +304,29 @@ export class OpenRouterProviderV2 implements LLMProvider {
       throw new Error("No response from OpenRouter")
     }
 
+    const inputTokens = data.usage.prompt_tokens
+    const inputCost = data.usage.cost_details?.upstream_inference_prompt_cost
+
+    // Model-agnostic cache savings: what the prompt WOULD have cost without any
+    // caching (every token at the base input rate) minus what it actually cost.
+    // The actual cost already encodes this model's own read discount / write
+    // premium, so no provider-specific multipliers are assumed. Positive on cache
+    // reads, negative on cold writes; undefined if the base price is unknown.
+    const basePrice = await getPromptTokenPrice(this.model, this.apiKey)
+    const usage = {
+      inputTokens,
+      outputTokens: data.usage.completion_tokens,
+      cost: data.usage.cost,
+      cacheReadTokens: data.usage.prompt_tokens_details?.cached_tokens ?? 0,
+      cacheWriteTokens: data.usage.prompt_tokens_details?.cache_write_tokens ?? 0,
+      inputCost,
+      outputCost: data.usage.cost_details?.upstream_inference_completions_cost,
+      cacheSavings:
+        basePrice != null && inputCost != null
+          ? inputTokens * basePrice - inputCost
+          : undefined,
+    }
+
     // Check for tool calls
     if (choice.message.tool_calls && choice.message.tool_calls.length > 0) {
       return {
@@ -254,11 +340,7 @@ export class OpenRouterProviderV2 implements LLMProvider {
             : {},
         })),
         stopReason: "tool_calls",
-        usage: {
-          inputTokens: data.usage.prompt_tokens,
-          outputTokens: data.usage.completion_tokens,
-          cost: data.usage.cost,
-        },
+        usage,
       }
     }
 
@@ -266,11 +348,7 @@ export class OpenRouterProviderV2 implements LLMProvider {
       content: choice.message.content,
       toolCalls: [],
       stopReason: choice.finish_reason === "length" ? "length" : "stop",
-      usage: {
-        inputTokens: data.usage.prompt_tokens,
-        outputTokens: data.usage.completion_tokens,
-        cost: data.usage.cost,
-      },
+      usage,
     }
   }
 }

@@ -12,6 +12,7 @@
     "typescript": "^5"
   },
   "dependencies": {
+    "@langfuse/client": "^5.9.0",
     "@langfuse/otel": "^5.9.0",
     "@langfuse/tracing": "^5.9.0",
     "@mozilla/readability": "^0.6.0",

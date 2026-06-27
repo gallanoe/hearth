@@ -1,4 +1,5 @@
 import { startObservation, startActiveObservation, propagateAttributes } from "@langfuse/tracing"
+import { getLangfuseClient } from "./instrumentation"
 import type {
   LLMProvider,
   LLMMessage,
@@ -41,12 +42,34 @@ export class TracedProvider implements LLMProvider {
 
     try {
       const res = await this.inner.send(system, messages, tools, opts)
+      // inputTokens is the TOTAL prompt size (both cache reads and writes are
+      // counted in it), so subtract both to keep input + cache_read + cache_creation
+      // == total. Reported with Anthropic's native usage keys so Langfuse shows a
+      // per-generation cache hit rate and breaks out cache-write cost.
+      const cacheRead = res.usage.cacheReadTokens ?? 0
+      const cacheWrite = res.usage.cacheWriteTokens ?? 0
       generation
         .update({
           output: res.content ?? { toolCalls: res.toolCalls },
-          usageDetails: { input: res.usage.inputTokens, output: res.usage.outputTokens },
-          ...(res.usage.cost != null ? { costDetails: { total: res.usage.cost } } : {}),
-          metadata: { stopReason: res.stopReason },
+          usageDetails: {
+            input: res.usage.inputTokens - cacheRead - cacheWrite,
+            output: res.usage.outputTokens,
+            ...(cacheRead > 0 ? { cache_read_input_tokens: cacheRead } : {}),
+            ...(cacheWrite > 0 ? { cache_creation_input_tokens: cacheWrite } : {}),
+          },
+          ...(res.usage.cost != null
+            ? {
+                costDetails: {
+                  ...(res.usage.inputCost != null ? { input: res.usage.inputCost } : {}),
+                  ...(res.usage.outputCost != null ? { output: res.usage.outputCost } : {}),
+                  total: res.usage.cost,
+                },
+              }
+            : {}),
+          metadata: {
+            stopReason: res.stopReason,
+            ...(res.usage.cacheSavings != null ? { cacheSavingsUsd: res.usage.cacheSavings } : {}),
+          },
         })
         .end()
       return res
@@ -62,9 +85,16 @@ export class TracedProvider implements LLMProvider {
   }
 }
 
-/** Handle passed to a session body for setting the trace's final output. */
+/** Handle passed to a session body for setting the trace's final output/metadata. */
 export interface SessionTraceHandle {
   setOutput(output: unknown): void
+  /** Attach session-level metadata to the trace span (e.g. cache savings). */
+  setMetadata(metadata: Record<string, unknown>): void
+  /**
+   * Emit a numeric Langfuse Score on the session trace, so it can be charted and
+   * trended across sessions. No-op when tracing is disabled.
+   */
+  score(name: string, value: number, opts?: { comment?: string; metadata?: Record<string, unknown> }): void
 }
 
 /**
@@ -91,6 +121,19 @@ export async function withSessionTrace<T>(
         return fn({
           setOutput: (output) => {
             span.update({ output })
+          },
+          setMetadata: (metadata) => {
+            span.update({ metadata })
+          },
+          score: (name, value, opts) => {
+            // activeTrace attaches the score to the currently-active span's trace,
+            // which is this session span (the loop runs inside this callback).
+            getLangfuseClient()?.score.activeTrace({
+              name,
+              value,
+              ...(opts?.comment != null ? { comment: opts.comment } : {}),
+              ...(opts?.metadata != null ? { metadata: opts.metadata } : {}),
+            })
           },
         })
       }),

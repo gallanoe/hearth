@@ -4,6 +4,7 @@ import type { AgentState } from "../agents/state"
 import { BudgetTracker, type BudgetConfig } from "./budget"
 import {
   buildSystemPrompt,
+  buildBudgetNote,
   buildWakeUpMessage,
   buildNotificationMessage,
   type WakeUpContext,
@@ -146,17 +147,19 @@ async function runSessionInner(
     // Get available tools for current room
     const tools = registry.getToolDefinitions(context.currentRoom)
 
-    // Build system prompt with current budget state (refreshed each turn)
-    const systemPrompt = buildSystemPrompt(budget.getState(), stores.persona)
+    // Static system prompt (cacheable). The live budget is injected at the tail
+    // via trailingNote so it doesn't invalidate the cached prefix each turn.
+    const systemPrompt = buildSystemPrompt(stores.persona)
 
     // Call LLM
     const response = await llm.send(systemPrompt, messages, tools, {
       name: "turn",
       metadata: { turn: turnSequence, room: context.currentRoom },
+      trailingNote: buildBudgetNote(budget.getState()),
     })
 
     // Record usage
-    budget.recordUsage(response.usage.inputTokens, response.usage.outputTokens, response.usage.cost)
+    budget.recordUsage(response.usage.inputTokens, response.usage.outputTokens, response.usage.cost, response.usage.cacheSavings)
     context.budget = budget.getState()
 
     // Check if context compaction is needed (separate from daily budget)
@@ -436,13 +439,34 @@ async function runSessionInner(
 
   // Record the session-level trace output.
   const finalState = budget.getState()
+
+  // % of total cost saved by prompt caching this session. The counterfactual
+  // (no-cache) bill is what we actually paid plus what caching saved, so a
+  // write-heavy session with few reads can legitimately show a negative %.
+  const counterfactualCost = finalState.totalCost + finalState.totalCacheSavings
+  const cacheCostSavingsPct =
+    counterfactualCost > 0
+      ? Math.round((finalState.totalCacheSavings / counterfactualCost) * 1000) / 10
+      : 0
+
   trace.setOutput({
     endReason,
     totalTokensUsed: finalState.spent,
     totalCost: finalState.totalCost,
+    cacheCostSavingsUsd: finalState.totalCacheSavings,
+    cacheCostSavingsPct,
     turns: turns.length,
     sessionSummary,
   })
+  trace.setMetadata({ cacheCostSavingsUsd: finalState.totalCacheSavings, cacheCostSavingsPct })
+
+  // Emit chartable Langfuse Scores (only when we actually have cost data).
+  if (finalState.totalCost > 0) {
+    trace.score("cache_cost_savings_pct", cacheCostSavingsPct, {
+      comment: `$${finalState.totalCacheSavings.toFixed(4)} saved across ${turns.length} turns`,
+    })
+    trace.score("cache_cost_savings_usd", Math.round(finalState.totalCacheSavings * 1e6) / 1e6)
+  }
 
   // End session in database
   try {

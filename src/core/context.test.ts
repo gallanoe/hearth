@@ -1,6 +1,7 @@
 import { test, expect, describe } from "bun:test"
 import {
   buildSystemPrompt,
+  buildBudgetNote,
   buildWakeUpMessage,
   buildRoomEntryMessage,
   buildNotificationMessage,
@@ -22,6 +23,7 @@ function makeBudget(overrides: Partial<BudgetState> = {}): BudgetState {
     warningThreshold: 200_000,
     warningIssued: false,
     totalCost: 0,
+    totalCacheSavings: 0,
     ...overrides,
   }
 }
@@ -39,28 +41,35 @@ function makeRoom(overrides: Partial<Room> = {}): Room {
 
 describe("buildSystemPrompt", () => {
   test("includes persona and mechanics", () => {
-    const prompt = buildSystemPrompt(makeBudget(), persona)
+    const prompt = buildSystemPrompt(persona)
     expect(prompt).toContain("Mechanics:")
     expect(prompt).toContain("move_to")
-    expect(prompt).toContain("Budget:")
+  })
+
+  test("is static — does not embed the volatile budget readout", () => {
+    // The budget must stay out of the cached prefix; see buildBudgetNote.
+    const prompt = buildSystemPrompt(persona)
+    expect(prompt).not.toContain("Budget:")
+  })
+})
+
+describe("buildBudgetNote", () => {
+  test("shows normal budget when healthy", () => {
+    const note = buildBudgetNote(makeBudget({
+      spent: 100_000,
+      remaining: 900_000,
+    }))
+    expect(note).not.toContain("BUDGET LOW")
+    expect(note).toContain("Budget:")
   })
 
   test("shows budget warning when low", () => {
-    const prompt = buildSystemPrompt(makeBudget({
+    const note = buildBudgetNote(makeBudget({
       spent: 900_000,
       remaining: 100_000,
-    }), persona)
-    expect(prompt).toContain("BUDGET LOW")
-    expect(prompt).toContain("wrapping up")
-  })
-
-  test("shows normal budget when healthy", () => {
-    const prompt = buildSystemPrompt(makeBudget({
-      spent: 100_000,
-      remaining: 900_000,
-    }), persona)
-    expect(prompt).not.toContain("BUDGET LOW")
-    expect(prompt).toContain("Budget:")
+    }))
+    expect(note).toContain("BUDGET LOW")
+    expect(note).toContain("wrapping up")
   })
 })
 

@@ -16,6 +16,8 @@ export interface BudgetConfig {
     warningThreshold: number
     warningIssued: boolean
     totalCost: number
+    /** Cumulative $ saved on prompt cost by prompt caching this session (may be negative). */
+    totalCacheSavings: number
   }
   
   /**
@@ -25,6 +27,7 @@ export interface BudgetConfig {
     private total: number
     private spent: number
     private totalCost: number = 0
+    private totalCacheSavings: number = 0
     private warningThreshold: number
     private warningIssued: boolean = false
 
@@ -37,10 +40,13 @@ export interface BudgetConfig {
     /**
      * Record tokens and cost spent on a turn.
      */
-    recordUsage(inputTokens: number, outputTokens: number, cost?: number): void {
+    recordUsage(inputTokens: number, outputTokens: number, cost?: number, cacheSavings?: number): void {
       this.spent += inputTokens + outputTokens
       if (cost != null) {
         this.totalCost += cost
+      }
+      if (cacheSavings != null) {
+        this.totalCacheSavings += cacheSavings
       }
     }
 
@@ -55,6 +61,7 @@ export interface BudgetConfig {
         warningThreshold: this.warningThreshold,
         warningIssued: this.warningIssued,
         totalCost: this.totalCost,
+        totalCacheSavings: this.totalCacheSavings,
       }
     }
   

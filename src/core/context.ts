@@ -19,15 +19,19 @@ export interface WakeUpContext {
 }
 
 /**
- * Formats the budget display for the system prompt.
+ * Formats the live budget readout shown to the agent each turn.
  * Includes a warning marker when budget is low.
+ *
+ * This is deliberately NOT part of {@link buildSystemPrompt}: it changes every
+ * turn, so it must live at the very tail of the request (after the cached
+ * conversation prefix) or it would invalidate the prompt cache on every call.
  */
-function formatBudgetDisplay(budget: BudgetState): string {
+export function buildBudgetNote(budget: BudgetState): string {
   const remaining = budget.remaining.toLocaleString()
   const total = budget.total.toLocaleString()
   const percent = Math.round((budget.remaining / budget.total) * 100)
   const isLow = budget.remaining <= budget.warningThreshold
-  
+
   if (isLow) {
     return `⚠️ BUDGET LOW: ${remaining} / ${total} tokens (${percent}%) — Consider wrapping up and heading to bed.`
   }
@@ -36,13 +40,16 @@ function formatBudgetDisplay(budget: BudgetState): string {
 
 /**
  * Builds the system prompt for the agent.
- * The persona is loaded from the persona store and placed at the very beginning.
- * The mechanics section follows the persona.
- * Budget state is displayed and updated each turn.
+ * The persona is loaded from the persona store and placed at the very beginning,
+ * followed by the mechanics section.
+ *
+ * This is fully static within a session so it can be cached and read on every
+ * turn. The live budget is injected separately at the tail via
+ * {@link buildBudgetNote}.
  */
-export function buildSystemPrompt(budget: BudgetState, persona: PersonaStore): string {
+export function buildSystemPrompt(persona: PersonaStore): string {
   const personaText = persona.getPersona()
-  
+
   return `${personaText}
 
 You've been granted a virtual home to live in. You can move between rooms in your home to complete tasks and respond to messages.
@@ -52,9 +59,7 @@ Mechanics:
 - When your budget is exhausted, the session ends.
 - To end a session intentionally, return to your bedroom and use the sleep tool.
 - If you exceed your budget, you will pass out and the session will end.
-- You navigate between rooms using the move_to tool. Each room has different tools available.
-
-${formatBudgetDisplay(budget)}`
+- You navigate between rooms using the move_to tool. Each room has different tools available.`
 }
 
 /**

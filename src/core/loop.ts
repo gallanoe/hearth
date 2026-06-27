@@ -151,6 +151,11 @@ async function runSessionInner(
   // it in traces instead of each turn being a single opaque leaf. Defined as a
   // closure so it shares the loop's mutable state (messages, budget, context, …).
   const runTurn = async (turnSpan: TurnSpanHandle): Promise<void> => {
+    // Surface what this turn is responding to at the turn level. The full model
+    // input (system + whole history) lives on the nested `completion`; here we
+    // record just the latest user message — the prompt driving the turn.
+    turnSpan.setInput(messages.findLast((m) => m.role === "user")?.content ?? null)
+
     // The fixed, room-independent tool set (dispatch wrappers + universal tools).
     // Stable across rooms, so a transition never invalidates the prompt cache.
     const tools = registry.getStaticToolDefinitions()

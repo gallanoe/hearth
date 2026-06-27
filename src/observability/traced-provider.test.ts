@@ -9,6 +9,7 @@ describe("withTurnSpan / withToolSpan with tracing disabled", () => {
   test("withTurnSpan runs the body and returns its value", async () => {
     let ran = false
     const result = await withTurnSpan({ turn: 1, room: "bedroom" }, async (span) => {
+      span.setInput("What would you like to do?")
       span.setMetadata({ extra: true })
       span.setOutput({ ok: 1 })
       ran = true

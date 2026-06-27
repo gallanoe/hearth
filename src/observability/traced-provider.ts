@@ -87,6 +87,7 @@ export class TracedProvider implements LLMProvider {
 
 /** Handle for the per-turn span. */
 export interface TurnSpanHandle {
+  setInput(input: unknown): void
   setOutput(output: unknown): void
   setMetadata(metadata: Record<string, unknown>): void
 }
@@ -104,6 +105,7 @@ export async function withTurnSpan<T>(
   return startActiveObservation("turn", async (span) => {
     span.update({ metadata: { turn: meta.turn, room: meta.room } })
     return fn({
+      setInput: (input) => span.update({ input }),
       setOutput: (output) => span.update({ output }),
       setMetadata: (metadata) => span.update({ metadata }),
     })

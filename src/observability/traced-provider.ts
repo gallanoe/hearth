@@ -43,6 +43,9 @@ export class TracedProvider implements LLMProvider {
         metadata: {
           ...opts?.metadata,
           ...(tools && tools.length > 0 ? { availableTools: tools.map((t) => t.name) } : {}),
+          // Also surface the trailing note (e.g. the in-world time of day) as a
+          // filterable metadata field, not just buried in the last input message.
+          ...(opts?.trailingNote ? { trailingNote: opts.trailingNote } : {}),
         },
       },
       { asType: "generation" },

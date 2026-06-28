@@ -31,7 +31,15 @@ export class TracedProvider implements LLMProvider {
       opts?.name ?? "llm-call",
       {
         model: this.model,
-        input: [{ role: "system", content: system }, ...messages],
+        // Mirror exactly what the inner provider sends: the ephemeral trailing
+        // note (e.g. the in-world time of day) is appended as a final user
+        // message AFTER the cache breakpoint, so include it here too — otherwise
+        // the trace input omits content the model actually received.
+        input: [
+          { role: "system", content: system },
+          ...messages,
+          ...(opts?.trailingNote ? [{ role: "user", content: opts.trailingNote }] : []),
+        ],
         metadata: {
           ...opts?.metadata,
           ...(tools && tools.length > 0 ? { availableTools: tools.map((t) => t.name) } : {}),

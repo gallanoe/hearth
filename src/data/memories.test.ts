@@ -52,7 +52,7 @@ describe("MemoryStore (in-memory fallback)", () => {
       const results = await store.search("chess")
 
       expect(results.length).toBe(1)
-      expect(results[0].memory.tags).toContain("chess")
+      expect(results[0]!.memory.tags).toContain("chess")
     })
 
     test("returns empty array when no matches", async () => {
@@ -86,11 +86,11 @@ describe("MemoryStore (in-memory fallback)", () => {
 
       // First search
       const results1 = await store.search("chess")
-      expect(results1[0].memory.accessCount).toBe(1)
+      expect(results1[0]!.memory.accessCount).toBe(1)
 
       // Second search
       const results2 = await store.search("chess")
-      expect(results2[0].memory.accessCount).toBe(2)
+      expect(results2[0]!.memory.accessCount).toBe(2)
     })
   })
 
@@ -111,7 +111,7 @@ describe("MemoryStore (in-memory fallback)", () => {
 
       const results = await store.search("chess")
       expect(results.length).toBe(1)
-      expect(results[0].memory.content).toBe("Public chess info")
+      expect(results[0]!.memory.content).toBe("Public chess info")
     })
 
     test("returns false for non-existent memory", async () => {

@@ -71,7 +71,7 @@ describe("todo tool", () => {
     const listResult = await todo.execute({ action: "list" }, ctx3)
     const match = listResult.output.match(/#(\d+)/)
     if (!match) throw new Error("Could not find todo in list")
-    const todoId = parseInt(match[1])
+    const todoId = parseInt(match[1]!)
 
     await todo.execute({ action: "update", id: todoId, status: "in_progress" }, ctx3)
 
@@ -86,7 +86,7 @@ describe("todo tool", () => {
     const listResult = await todo.execute({ action: "list" }, ctx4)
     const match = listResult.output.match(/#(\d+)/)
     if (!match) throw new Error("Could not find todo")
-    const todoId = parseInt(match[1])
+    const todoId = parseInt(match[1]!)
 
     await todo.execute({ action: "update", id: todoId, status: "done" }, ctx4)
 
@@ -124,7 +124,7 @@ describe("todo tool", () => {
     const listResult = await todo.execute({ action: "list" }, ctx5)
     const match = listResult.output.match(/#(\d+)/)
     if (!match) throw new Error("Could not find todo")
-    const todoId = parseInt(match[1])
+    const todoId = parseInt(match[1]!)
 
     const result = await todo.execute({ action: "update", id: todoId, status: "in_progress" }, ctx5)
     expect(result.success).toBe(true)
@@ -137,7 +137,7 @@ describe("todo tool", () => {
     const listResult = await todo.execute({ action: "list" }, ctx6)
     const match = listResult.output.match(/#(\d+)/)
     if (!match) throw new Error("Could not find todo")
-    const todoId = parseInt(match[1])
+    const todoId = parseInt(match[1]!)
 
     // Mark as done
     await todo.execute({ action: "update", id: todoId, status: "done" }, ctx6)
@@ -154,7 +154,7 @@ describe("todo tool", () => {
     const listResult = await todo.execute({ action: "list" }, ctx7)
     const match = listResult.output.match(/#(\d+)/)
     if (!match) throw new Error("Could not find todo")
-    const todoId = parseInt(match[1])
+    const todoId = parseInt(match[1]!)
 
     const result = await todo.execute({ action: "update", id: todoId, subject: "New subject" }, ctx7)
     expect(result.success).toBe(true)
@@ -171,7 +171,7 @@ describe("todo tool", () => {
     const listResult = await todo.execute({ action: "list" }, ctx8)
     const match = listResult.output.match(/#(\d+)/)
     if (!match) throw new Error("Could not find todo")
-    const todoId = parseInt(match[1])
+    const todoId = parseInt(match[1]!)
 
     const result = await todo.execute({ action: "update", id: todoId, priority: 1 }, ctx8)
     expect(result.success).toBe(true)
@@ -198,7 +198,7 @@ describe("todo tool", () => {
     const listResult = await todo.execute({ action: "list" }, ctx9)
     const match = listResult.output.match(/#(\d+)/)
     if (!match) throw new Error("Could not find todo")
-    const todoId = parseInt(match[1])
+    const todoId = parseInt(match[1]!)
 
     const removeResult = await todo.execute({ action: "remove", id: todoId }, ctx9)
     expect(removeResult.success).toBe(true)

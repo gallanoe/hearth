@@ -73,7 +73,7 @@ describe("forget tool", () => {
     )
     const idMatch = storeResult.output.match(/Memory #(\d+)/)
     expect(idMatch).not.toBeNull()
-    const memoryId = parseInt(idMatch![1])
+    const memoryId = parseInt(idMatch![1]!)
 
     const result = await forget.execute({ memoryId }, ctx)
     expect(result.success).toBe(true)

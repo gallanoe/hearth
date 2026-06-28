@@ -3,6 +3,9 @@
   "module": "index.ts",
   "type": "module",
   "private": true,
+  "scripts": {
+    "typecheck": "tsc --noEmit && tsc -b web"
+  },
   "devDependencies": {
     "@types/bun": "latest",
     "@types/jsdom": "^27.0.0",

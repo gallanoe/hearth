@@ -25,5 +25,9 @@
     "noUnusedLocals": false,
     "noUnusedParameters": false,
     "noPropertyAccessFromIndexSignature": false
-  }
+  },
+  // The web frontend is a separate Vite app with its own tsconfigs (web/tsconfig*.json)
+  // and its own `@/*` path aliases. Exclude it here so the backend config doesn't
+  // check it under the wrong settings; run `tsc -b web` to typecheck the frontend.
+  "exclude": ["web", "node_modules"]
 }

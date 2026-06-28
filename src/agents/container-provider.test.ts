@@ -63,11 +63,11 @@ describe("ContainerProvider", () => {
       expect(calls.length).toBe(2)
 
       // Verify volume create command
-      const firstCall = calls[0]
+      const firstCall = calls[0]!
       expect(firstCall[0]).toEqual(["bash", "-c", expect.stringContaining("docker volume create")])
 
       // Verify docker run command
-      const secondCall = calls[1]
+      const secondCall = calls[1]!
       const runCmd = secondCall[0][2] as string
       expect(runCmd).toContain("docker run -d")
       expect(runCmd).toContain("hearth-agent-1")
@@ -86,7 +86,7 @@ describe("ContainerProvider", () => {
       await provider.start("agent-1")
 
       expect(calls.length).toBe(1)
-      const cmd = calls[0][0][2] as string
+      const cmd = calls[0]![0][2] as string
       expect(cmd).toContain("docker start")
       expect(cmd).toContain("hearth-agent-1")
     })
@@ -100,7 +100,7 @@ describe("ContainerProvider", () => {
       await provider.stop("agent-1")
 
       expect(calls.length).toBe(1)
-      const cmd = calls[0][0][2] as string
+      const cmd = calls[0]![0][2] as string
       expect(cmd).toContain("docker stop")
       expect(cmd).toContain("hearth-agent-1")
     })
@@ -115,11 +115,11 @@ describe("ContainerProvider", () => {
 
       expect(calls.length).toBe(2)
 
-      const rmCmd = calls[0][0][2] as string
+      const rmCmd = calls[0]![0][2] as string
       expect(rmCmd).toContain("docker rm -f")
       expect(rmCmd).toContain("hearth-agent-1")
 
-      const volCmd = calls[1][0][2] as string
+      const volCmd = calls[1]![0][2] as string
       expect(volCmd).toContain("docker volume rm")
       expect(volCmd).toContain("hearth-vol-agent-1")
     })

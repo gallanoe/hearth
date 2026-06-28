@@ -82,9 +82,9 @@ describe("compaction", () => {
       expect(result.summaryTokens).toBe(50) // From mock LLM
 
       // First message should be the summary
-      expect(result.messages[0].role).toBe("user")
-      expect(result.messages[0].content).toContain("[Earlier this session]")
-      expect(result.messages[0].content).toContain("Summary:")
+      expect(result.messages[0]!.role).toBe("user")
+      expect(result.messages[0]!.content).toContain("[Earlier this session]")
+      expect(result.messages[0]!.content).toContain("Summary:")
     })
 
     test("preserves the most recent messages", async () => {

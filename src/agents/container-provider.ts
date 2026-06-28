@@ -75,7 +75,7 @@ export class ContainerProvider {
       const result = await this.run(
         `docker inspect --format '{{.Id}} {{.Config.Image}} {{.State.Running}}' ${shellEscape(`hearth-${agentId}`)}`
       )
-      const [containerId, image, running] = result.stdout.trim().split(" ")
+      const [containerId = "", image = "", running] = result.stdout.trim().split(" ")
       return {
         containerId,
         agentId,
@@ -95,7 +95,7 @@ export class ContainerProvider {
     if (!result.stdout.trim()) return []
 
     return result.stdout.trim().split("\n").map((line) => {
-      const [containerId, name, image, state] = line.split(" ")
+      const [containerId = "", name = "", image = "", state] = line.split(" ")
       const agentId = name.replace(/^hearth-/, "")
       return {
         containerId,

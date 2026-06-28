@@ -90,7 +90,7 @@ describe("LetterStore", () => {
 
       const unread = store.getUnreadInbound()
       expect(unread.length).toBe(1)
-      expect(unread[0].content).toBe("Letter 2")
+      expect(unread[0]!.content).toBe("Letter 2")
     })
 
     test("returns letters sorted by sentAt ascending", () => {
@@ -98,8 +98,8 @@ describe("LetterStore", () => {
       store.addInbound("Second")
 
       const unread = store.getUnreadInbound()
-      expect(unread[0].content).toBe("First")
-      expect(unread[1].content).toBe("Second")
+      expect(unread[0]!.content).toBe("First")
+      expect(unread[1]!.content).toBe("Second")
     })
   })
 
@@ -166,7 +166,7 @@ describe("LetterStore", () => {
 
       const outbox = store.getOutbox()
       expect(outbox.length).toBe(1)
-      expect(outbox[0].content).toBe("Letter 2")
+      expect(outbox[0]!.content).toBe("Letter 2")
     })
   })
 
@@ -193,7 +193,7 @@ describe("LetterStore", () => {
       store.sendWelcomeLetterIfFirstSession()
       const unread = store.getUnreadInbound()
       expect(unread.length).toBe(1)
-      expect(unread[0].content).toContain("Welcome")
+      expect(unread[0]!.content).toContain("Welcome")
     })
 
     test("does not send duplicate welcome letters", () => {

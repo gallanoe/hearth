@@ -31,5 +31,5 @@ const windowEvents: string[] = [
  */
 export function getRandomWindowEvent(): string {
   const index = Math.floor(Math.random() * windowEvents.length)
-  return windowEvents[index]
+  return windowEvents[index]!
 }

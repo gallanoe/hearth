@@ -89,7 +89,7 @@ export class ContainerWorkspace implements Workspace {
       return {
         name: nameParts.join(" "),
         isDirectory: type === "d",
-        size: parseInt(size, 10),
+        size: parseInt(size ?? "", 10),
       }
     })
   }
@@ -109,9 +109,9 @@ export class ContainerWorkspace implements Workspace {
       throw new Error(`stat failed: ${result.stderr}`)
     }
     const parts = result.stdout.trim().split(" ")
-    const size = parseInt(parts[0], 10)
+    const size = parseInt(parts[0] ?? "", 10)
     const type = parts.slice(1, -1).join(" ") // "regular file" or "directory"
-    const mtime = parseInt(parts[parts.length - 1], 10)
+    const mtime = parseInt(parts[parts.length - 1] ?? "", 10)
 
     return {
       size,

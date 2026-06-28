@@ -32,9 +32,9 @@ describe("decayToolResults", () => {
     decayToolResults(messages, 3, TEST_DECAY)
 
     // Turn 1 is older than cutoff (3 - 1 = 2), should be stubbed
-    expect(messages[0].content).toBe("[read_book(): returned 1000 chars]")
+    expect(messages[0]!.content).toBe("[read_book(): returned 1000 chars]")
     // Turn 2 is at cutoff (2 <= 2), should be stubbed
-    expect(messages[2].content).toBe("[read_book(): returned 800 chars]")
+    expect(messages[2]!.content).toBe("[read_book(): returned 800 chars]")
   })
 
   test("preserves tool results within the decay window", () => {
@@ -46,7 +46,7 @@ describe("decayToolResults", () => {
     decayToolResults(messages, 3, TEST_DECAY)
 
     // Turn 3 is the current turn, within window — content unchanged
-    expect(messages[0].content).toBe(original)
+    expect(messages[0]!.content).toBe(original)
   })
 
   test("does not stub short tool results below threshold", () => {
@@ -58,7 +58,7 @@ describe("decayToolResults", () => {
     decayToolResults(messages, 5, TEST_DECAY)
 
     // Content is below DECAY_STUB_THRESHOLD, should be untouched
-    expect(messages[0].content).toBe(shortContent)
+    expect(messages[0]!.content).toBe(shortContent)
   })
 
   test("does not touch non-tool messages", () => {
@@ -72,7 +72,7 @@ describe("decayToolResults", () => {
     decayToolResults(messages, 10, TEST_DECAY)
 
     messages.forEach((m, i) => {
-      expect(m.content).toBe(originals[i])
+      expect(m.content).toBe(originals[i]!)
     })
   })
 
@@ -84,7 +84,7 @@ describe("decayToolResults", () => {
 
     decayToolResults(messages, 10, TEST_DECAY)
 
-    expect(messages[0].content).toBe(content)
+    expect(messages[0]!.content).toBe(content)
   })
 
   test("mutates messages in place", () => {
@@ -97,7 +97,7 @@ describe("decayToolResults", () => {
 
     // Same object reference, mutated in place
     expect(messages[0]).toBe(ref)
-    expect(messages[0].content).toStartWith("[read_book():")
+    expect(messages[0]!.content).toStartWith("[read_book():")
   })
 
   test("handles multiple turns with mixed eligibility", () => {
@@ -112,10 +112,10 @@ describe("decayToolResults", () => {
 
     decayToolResults(messages, 3, TEST_DECAY)
 
-    expect(messages[0].content).toBe("[fetch(): returned 1000 chars]")
-    expect(messages[2].content).toBe("ok")
-    expect(messages[3].content).toBe("[read_book(): returned 2000 chars]")
-    expect(messages[5].content).toBe(longContent(1500))
+    expect(messages[0]!.content).toBe("[fetch(): returned 1000 chars]")
+    expect(messages[2]!.content).toBe("ok")
+    expect(messages[3]!.content).toBe("[read_book(): returned 2000 chars]")
+    expect(messages[5]!.content).toBe(longContent(1500))
   })
 
   test("handles null content gracefully", () => {
@@ -125,7 +125,7 @@ describe("decayToolResults", () => {
 
     // Should not throw
     decayToolResults(messages, 5, TEST_DECAY)
-    expect(messages[0].content).toBeNull()
+    expect(messages[0]!.content).toBeNull()
   })
 
   test("config constants have expected defaults", () => {
@@ -142,6 +142,6 @@ describe("decayToolResults", () => {
     decayToolResults(messages, 5, TEST_DECAY)
 
     // length === threshold, not > threshold, so it stays
-    expect(messages[0].content).toBe(exact)
+    expect(messages[0]!.content).toBe(exact)
   })
 })

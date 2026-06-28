@@ -353,7 +353,7 @@ describe("TodoStore (in-memory fallback)", () => {
       const todos = await store.list()
 
       expect(todos.length).toBe(1)
-      expect(todos[0].subject).toBe("Active")
+      expect(todos[0]!.subject).toBe("Active")
     })
 
     test("returns all todos when includeAll is true", async () => {
@@ -382,9 +382,9 @@ describe("TodoStore (in-memory fallback)", () => {
 
       const todos = await store.list()
 
-      expect(todos[0].subject).toBe("High priority")
-      expect(todos[1].subject).toBe("Medium priority")
-      expect(todos[2].subject).toBe("Low priority")
+      expect(todos[0]!.subject).toBe("High priority")
+      expect(todos[1]!.subject).toBe("Medium priority")
+      expect(todos[2]!.subject).toBe("Low priority")
     })
 
     test("sorts by created date when priorities are equal", async () => {
@@ -394,9 +394,9 @@ describe("TodoStore (in-memory fallback)", () => {
 
       const todos = await store.list()
 
-      expect(todos[0].subject).toBe("First")
-      expect(todos[1].subject).toBe("Second")
-      expect(todos[2].subject).toBe("Third")
+      expect(todos[0]!.subject).toBe("First")
+      expect(todos[1]!.subject).toBe("Second")
+      expect(todos[2]!.subject).toBe("Third")
     })
 
     test("includes cancelled todos resolved today", async () => {
@@ -457,8 +457,8 @@ describe("TodoStore (in-memory fallback)", () => {
 
       expect(list1.length).toBe(1)
       expect(list2.length).toBe(1)
-      expect(list1[0].subject).toBe("Agent 1 task")
-      expect(list2[0].subject).toBe("Agent 2 task")
+      expect(list1[0]!.subject).toBe("Agent 1 task")
+      expect(list2[0]!.subject).toBe("Agent 2 task")
     })
 
     test("get does not return todos from other agents", async () => {

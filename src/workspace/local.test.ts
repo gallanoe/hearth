@@ -110,7 +110,7 @@ describe("LocalWorkspace", () => {
       const entries = await workspace.listDir(".")
       const names = entries.map((e) => e.name).sort()
       expect(names).toEqual(["a.txt", "b.txt"])
-      expect(entries[0].isDirectory).toBe(false)
+      expect(entries[0]!.isDirectory).toBe(false)
     })
 
     test("identifies directories", async () => {

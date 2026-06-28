@@ -2,6 +2,7 @@ import { useMemo } from "react"
 import { Link, useParams } from "react-router"
 import { useAsync } from "@/hooks/useAsync"
 import { useAgentStream } from "@/hooks/useAgentStream"
+import { useStickToBottom } from "@/hooks/useStickToBottom"
 import { getSession } from "@/lib/api"
 import { Loading, ErrorMessage } from "@/components/ui"
 import { ToolCard, type ToolCall } from "@/components/ToolCard"
@@ -37,6 +38,15 @@ export default function SessionPage() {
   }, [session.data, stream.messages, sid])
 
   const isLive = stream.activeSessionId === sid && stream.status === "awake"
+
+  // Auto-scroll: stick to the bottom as messages arrive, unless the reader has
+  // scrolled up. The content key changes as messages are appended or the last
+  // one grows; switching sessions (sid) jumps to the bottom.
+  const lastMessage = messages[messages.length - 1]
+  const stickRef = useStickToBottom(
+    `${messages.length}:${lastMessage?.id ?? ""}:${lastMessage?.content?.length ?? 0}`,
+    sid,
+  )
 
   // Tool results are their own role:"tool" messages, linked back by toolCallId.
   // Fold each into its originating call, and remember which results we've
@@ -112,6 +122,8 @@ export default function SessionPage() {
               />
             ),
           )}
+          {/* Anchor for stick-to-bottom; locates the scroll container. */}
+          <div ref={stickRef} />
         </div>
       </div>
     </div>

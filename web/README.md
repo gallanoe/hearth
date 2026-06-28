@@ -24,7 +24,7 @@ API requests to `/api/*` are proxied to the Hearth backend at `http://localhost:
 
 ```bash
 # from the repo root
-docker compose up        # or: bun run src/index.ts
+docker compose up        # or: bun run src/main.ts
 ```
 
 ## Scripts

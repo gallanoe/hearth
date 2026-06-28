@@ -32,33 +32,67 @@ Communication with the outside world happens through letters—async, not chat. 
 
 ## Running
 
-The recommended way to run Hearth is with Docker Compose:
+Hearth has three pieces you start independently, in this order:
+
+1. **Observability stack** — self-hosted Langfuse (plus ClickHouse, Redis, MinIO, Postgres) that collects traces. Optional, but the backend points at it by default.
+2. **Backend server** — the Hearth agent runtime and `/api`, with its own Postgres. Listens on port `3000`.
+3. **Frontend web server** — the Vite/React UI. Listens on port `5173` in dev.
+
+First, create your environment file:
 
 ```bash
-# Set your OpenRouter API key
-export OPENROUTER_API_KEY=your-key
-
-# Start Hearth and Postgres
-docker compose up
+cp .env.template .env
+# Required: OPENROUTER_API_KEY.
+# Self-hosting Langfuse? Replace every CHANGEME and generate real secrets,
+# e.g. ENCRYPTION_KEY: `openssl rand -hex 32`.
 ```
 
-This starts the Hearth server on port 3000 with a Postgres database for persistence.
+Both Compose files auto-load `.env` from the repo root.
 
-### Running without Docker
-
-Note this hasn't been tested in a while.
+### 1. Observability stack (Langfuse)
 
 ```bash
-# Install dependencies
+./scripts/start-observability.sh
+```
+
+Creates the shared `hearth-observability` Docker network, brings up the Langfuse stack (`docker compose -p langfuse -f docker-compose.langfuse.yml up -d`), and waits for it to be healthy. UI at **http://localhost:3001**.
+
+To run without tracing, leave `LANGFUSE_PUBLIC_KEY` / `LANGFUSE_SECRET_KEY` blank in `.env` and skip this step.
+
+### 2. Backend server (Hearth + Postgres)
+
+```bash
+./scripts/start-hearth.sh
+```
+
+Builds and starts the Hearth app and its Postgres (`docker compose -p hearth up -d --build`), joining the observability network so traces reach Langfuse. API at **http://localhost:3000**. (Plain `docker compose up --build` works too.)
+
+**Without Docker (local dev):**
+
+```bash
 bun install
 
-# Set environment variables
+# Needs a reachable Postgres — e.g. start just the db service:
+#   docker compose up -d db
 export OPENROUTER_API_KEY=your-key
-export DATABASE_URL=postgres://user:password@localhost:5432/hearth
+export DATABASE_URL=postgres://hearth:hearth@localhost:5432/hearth
 
-# Start the server
-bun run src/index.ts
+# Outside Docker you can't resolve langfuse-web by service name, so point at the
+# published port instead (or leave the Langfuse keys blank to disable tracing):
+export LANGFUSE_BASE_URL=http://localhost:3001
+
+bun run src/main.ts
 ```
+
+### 3. Frontend web server (Vite)
+
+```bash
+cd web
+bun install
+bun run dev          # http://localhost:5173
+```
+
+The dev server proxies `/api/*` to the backend at `http://localhost:3000` (see `web/vite.config.ts`), so start the backend first. For a production build, run `bun run build` (outputs to `web/dist/`) and serve it with `bun run preview`.
 
 ## API
 

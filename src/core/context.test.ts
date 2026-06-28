@@ -1,12 +1,10 @@
 import { test, expect, describe } from "bun:test"
 import {
   buildSystemPrompt,
-  buildBudgetNote,
   buildWakeUpMessage,
   buildRoomEntryMessage,
   buildNotificationMessage,
 } from "./context"
-import type { BudgetState } from "./budget"
 import type { Room } from "../types/rooms"
 import { PersonaStore } from "../data/persona"
 import { RoomDecorationStore } from "../data/decorations"
@@ -14,19 +12,6 @@ import { z } from "zod"
 
 const persona = new PersonaStore()
 const decorations = new RoomDecorationStore()
-
-function makeBudget(overrides: Partial<BudgetState> = {}): BudgetState {
-  return {
-    total: 1_000_000,
-    spent: 0,
-    remaining: 1_000_000,
-    warningThreshold: 200_000,
-    warningIssued: false,
-    totalCost: 0,
-    totalCacheSavings: 0,
-    ...overrides,
-  }
-}
 
 function makeRoom(overrides: Partial<Room> = {}): Room {
   return {
@@ -46,30 +31,13 @@ describe("buildSystemPrompt", () => {
     expect(prompt).toContain("move_to")
   })
 
-  test("is static — does not embed the volatile budget readout", () => {
-    // The budget must stay out of the cached prefix; see buildBudgetNote.
+  test("does not surface the token budget to the agent", () => {
+    // The agent is never told about its token budget; the budget is tracked
+    // internally only.
     const prompt = buildSystemPrompt(persona)
-    expect(prompt).not.toContain("Budget:")
-  })
-})
-
-describe("buildBudgetNote", () => {
-  test("shows normal budget when healthy", () => {
-    const note = buildBudgetNote(makeBudget({
-      spent: 100_000,
-      remaining: 900_000,
-    }))
-    expect(note).not.toContain("BUDGET LOW")
-    expect(note).toContain("Budget:")
-  })
-
-  test("shows budget warning when low", () => {
-    const note = buildBudgetNote(makeBudget({
-      spent: 900_000,
-      remaining: 100_000,
-    }))
-    expect(note).toContain("BUDGET LOW")
-    expect(note).toContain("wrapping up")
+    expect(prompt).not.toContain("Budget")
+    expect(prompt).not.toContain("budget")
+    expect(prompt).not.toContain("token")
   })
 })
 
@@ -77,7 +45,6 @@ describe("buildWakeUpMessage", () => {
   test("includes session number and room description", () => {
     const msg = buildWakeUpMessage({
       session: 5,
-      budget: makeBudget(),
       currentRoom: makeRoom(),
       reflections: [],
       inboxCount: 0,
@@ -87,13 +54,25 @@ describe("buildWakeUpMessage", () => {
     }, decorations)
     expect(msg).toContain("Session 5")
     expect(msg).toContain("A cozy bedroom.")
-    expect(msg).toContain("1000k tokens")
+  })
+
+  test("does not surface the token budget to the agent", () => {
+    const msg = buildWakeUpMessage({
+      session: 1,
+      currentRoom: makeRoom(),
+      reflections: [],
+      inboxCount: 0,
+      previousSessionSummary: null,
+      memoryCount: 0,
+      pendingTodoCount: 0,
+    }, decorations)
+    expect(msg).not.toContain("budget")
+    expect(msg).not.toContain("token")
   })
 
   test("includes previous session summary when present", () => {
     const msg = buildWakeUpMessage({
       session: 2,
-      budget: makeBudget(),
       currentRoom: makeRoom(),
       reflections: [],
       inboxCount: 0,
@@ -108,7 +87,6 @@ describe("buildWakeUpMessage", () => {
   test("includes inbox count when > 0", () => {
     const msg = buildWakeUpMessage({
       session: 1,
-      budget: makeBudget(),
       currentRoom: makeRoom(),
       reflections: [],
       inboxCount: 3,
@@ -122,7 +100,6 @@ describe("buildWakeUpMessage", () => {
   test("uses singular 'letter' for 1 message", () => {
     const msg = buildWakeUpMessage({
       session: 1,
-      budget: makeBudget(),
       currentRoom: makeRoom(),
       reflections: [],
       inboxCount: 1,
@@ -136,7 +113,6 @@ describe("buildWakeUpMessage", () => {
   test("includes memory count when > 0", () => {
     const msg = buildWakeUpMessage({
       session: 1,
-      budget: makeBudget(),
       currentRoom: makeRoom(),
       reflections: [],
       inboxCount: 0,
@@ -150,7 +126,6 @@ describe("buildWakeUpMessage", () => {
   test("omits inbox and memory sections when zero", () => {
     const msg = buildWakeUpMessage({
       session: 1,
-      budget: makeBudget(),
       currentRoom: makeRoom(),
       reflections: [],
       inboxCount: 0,
@@ -165,7 +140,6 @@ describe("buildWakeUpMessage", () => {
   test("includes pending todo count when > 0", () => {
     const msg = buildWakeUpMessage({
       session: 1,
-      budget: makeBudget(),
       currentRoom: makeRoom(),
       reflections: [],
       inboxCount: 0,
@@ -179,7 +153,6 @@ describe("buildWakeUpMessage", () => {
   test("uses singular 'todo' for 1 todo", () => {
     const msg = buildWakeUpMessage({
       session: 1,
-      budget: makeBudget(),
       currentRoom: makeRoom(),
       reflections: [],
       inboxCount: 0,
@@ -193,7 +166,6 @@ describe("buildWakeUpMessage", () => {
   test("omits todo section when zero", () => {
     const msg = buildWakeUpMessage({
       session: 1,
-      budget: makeBudget(),
       currentRoom: makeRoom(),
       reflections: [],
       inboxCount: 0,
@@ -256,30 +228,6 @@ describe("buildNotificationMessage", () => {
     expect(msg).not.toBeNull()
     expect(msg).toContain("Office")
     expect(msg).toContain("The terminal hums.")
-  })
-
-  test("includes budget warning when low", () => {
-    const msg = buildNotificationMessage({
-      budgetWarning: {
-        remaining: 50_000,
-        total: 1_000_000,
-        percentRemaining: 5,
-      },
-    }, decorations)
-    expect(msg).not.toBeNull()
-    expect(msg).toContain("Budget warning")
-    expect(msg).toContain("5%")
-  })
-
-  test("does not show budget warning above 20%", () => {
-    const msg = buildNotificationMessage({
-      budgetWarning: {
-        remaining: 300_000,
-        total: 1_000_000,
-        percentRemaining: 30,
-      },
-    }, decorations)
-    expect(msg).toBeNull()
   })
 
   test("includes inbox notification", () => {

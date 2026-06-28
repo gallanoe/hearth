@@ -4,7 +4,6 @@ import type { AgentState } from "../agents/state"
 import { BudgetTracker, type BudgetConfig } from "./budget"
 import {
   buildSystemPrompt,
-  buildBudgetNote,
   buildWakeUpMessage,
   buildNotificationMessage,
   type WakeUpContext,
@@ -127,7 +126,6 @@ async function runSessionInner(
   const pendingTodoCount = await stores.todos.getPendingCount()
   const wakeUpContext: WakeUpContext = {
     session: config.sessionNumber,
-    budget: budget.getState(),
     currentRoom: startRoom,
     reflections: config.reflections,
     inboxCount: config.inboxCount,
@@ -160,8 +158,7 @@ async function runSessionInner(
     // Stable across rooms, so a transition never invalidates the prompt cache.
     const tools = registry.getStaticToolDefinitions()
 
-    // Static system prompt (cacheable). The live budget is injected at the tail
-    // via trailingNote so it doesn't invalidate the cached prefix each turn.
+    // Static system prompt (cacheable).
     const systemPrompt = buildSystemPrompt(stores.persona)
 
     // Call LLM. `availableTools` (the full injected set) is recorded by the
@@ -175,7 +172,6 @@ async function runSessionInner(
         room: context.currentRoom,
         roomTools: registry.getRoomToolNames(context.currentRoom),
       },
-      trailingNote: buildBudgetNote(budget.getState()),
     })
 
     // Record usage
@@ -384,17 +380,6 @@ async function runSessionInner(
         }
       }
 
-      // Check for budget warning
-      const budgetForNotification = budget.getState()
-      const percentRemaining = Math.round((budgetForNotification.remaining / budgetForNotification.total) * 100)
-      if (budgetForNotification.remaining <= budgetForNotification.warningThreshold) {
-        notifications.budgetWarning = {
-          remaining: budgetForNotification.remaining,
-          total: budgetForNotification.total,
-          percentRemaining,
-        }
-      }
-
       // Check for unread inbox
       const inboxCount = stores.letters.getUnreadCount()
       if (inboxCount > 0) {
@@ -424,17 +409,6 @@ async function runSessionInner(
 
       // Collect notifications
       const notifications: TurnNotifications = {}
-
-      // Check for budget warning
-      const budgetForNotification = budget.getState()
-      const percentRemaining = Math.round((budgetForNotification.remaining / budgetForNotification.total) * 100)
-      if (budgetForNotification.remaining <= budgetForNotification.warningThreshold) {
-        notifications.budgetWarning = {
-          remaining: budgetForNotification.remaining,
-          total: budgetForNotification.total,
-          percentRemaining,
-        }
-      }
 
       // Check for unread inbox
       const inboxCount = stores.letters.getUnreadCount()
@@ -489,12 +463,20 @@ async function runSessionInner(
 
   // Main loop. Each turn runs inside its own span so the LLM completion and the
   // tool executions it triggers appear nested beneath it.
-  while (!budget.isExhausted() && !context.signals.requestedSleep) {
+  //
+  // The session ends only when the agent chooses to — the shutdown tool sets
+  // requestedSleep. Budget exhaustion no longer terminates the loop: the budget
+  // is still tracked, but BudgetTracker.isExhausted() is intentionally left
+  // unwired here so a session is bounded only by the agent's own decision.
+  while (!context.signals.requestedSleep) {
     turnSequence++
     await withTurnSpan({ turn: turnSequence, room: context.currentRoom }, runTurn)
   }
 
-  // Determine end reason
+  // Determine end reason. With budget exhaustion unwired from the main loop, a
+  // session can only end via the shutdown tool, so this currently always
+  // resolves to "sleep". The budget_exhausted branch (and its logging below) is
+  // kept intact for if/when exhaustion is rewired.
   const endReason = context.signals.requestedSleep ? "sleep" : "budget_exhausted"
 
   if (endReason === "sleep") {

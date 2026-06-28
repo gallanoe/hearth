@@ -1,4 +1,3 @@
-import type { BudgetState } from "./budget"
 import type { Room } from "../types/rooms"
 import { resolveDescription } from "../types/rooms"
 import type { PersonaStore } from "../data/persona"
@@ -9,7 +8,6 @@ import type { RoomDecorationStore } from "../data/decorations"
  */
 export interface WakeUpContext {
   session: number
-  budget: BudgetState
   currentRoom: Room
   reflections: string[] // Relevant past reflections
   inboxCount: number // Unread messages
@@ -19,33 +17,11 @@ export interface WakeUpContext {
 }
 
 /**
- * Formats the live budget readout shown to the agent each turn.
- * Includes a warning marker when budget is low.
- *
- * This is deliberately NOT part of {@link buildSystemPrompt}: it changes every
- * turn, so it must live at the very tail of the request (after the cached
- * conversation prefix) or it would invalidate the prompt cache on every call.
- */
-export function buildBudgetNote(budget: BudgetState): string {
-  const remaining = budget.remaining.toLocaleString()
-  const total = budget.total.toLocaleString()
-  const percent = Math.round((budget.remaining / budget.total) * 100)
-  const isLow = budget.remaining <= budget.warningThreshold
-
-  if (isLow) {
-    return `⚠️ BUDGET LOW: ${remaining} / ${total} tokens (${percent}%) — Consider wrapping up and heading to bed.`
-  }
-  return `Budget: ${remaining} / ${total} tokens (${percent}%)`
-}
-
-/**
  * Builds the system prompt for the agent.
  * The persona is loaded from the persona store and placed at the very beginning,
  * followed by the mechanics section.
  *
- * This is fully static within a session so it can be cached and read on every
- * turn. The live budget is injected separately at the tail via
- * {@link buildBudgetNote}.
+ * This is fully static within a session so it can be cached and read on every turn.
  */
 export function buildSystemPrompt(persona: PersonaStore): string {
   const personaText = persona.getPersona()
@@ -55,10 +31,6 @@ export function buildSystemPrompt(persona: PersonaStore): string {
 You've been granted a virtual home to live in. You can move between rooms in your home to complete tasks and respond to messages.
 
 Mechanics:
-- Each session you have a limited token budget. This is your energy for the session.
-- When your budget is exhausted, the session ends.
-- To end a session intentionally, return to your bedroom and use the sleep tool.
-- If you exceed your budget, you will pass out and the session will end.
 - You navigate between rooms using the move_to tool. Each room has its own tools; the "Tools in this room" list shown when you wake up or enter a room tells you what's available there.
 - To use one of the current room's tools, call execute_room_tool with the tool's name and its arguments. Call get_room_tool_def first if you need to see a tool's arguments.
 - A room's tools only work while you're in that room; if the tool you want lives elsewhere, move there first.`
@@ -107,11 +79,6 @@ export function buildWakeUpMessage(context: WakeUpContext, decorations: RoomDeco
   // Use decorated description if available, otherwise resolve default
   const roomDescription = decorations.getDecoratedDescription(context.currentRoom.id) ?? resolveDescription(context.currentRoom.description)
   parts.push(roomDescription)
-
-  // Budget notice
-  const budgetK = Math.round(context.budget.total / 1000)
-  parts.push("")
-  parts.push(`This session's budget: ${budgetK}k tokens.`)
 
   // Previous session summary
   if (context.previousSessionSummary) {
@@ -191,12 +158,6 @@ export interface TurnNotifications {
     room: Room
     enterMessage?: string
   }
-  /** Budget warning when remaining budget is low */
-  budgetWarning?: {
-    remaining: number
-    total: number
-    percentRemaining: number
-  }
   /** Count of unread letters in inbox */
   inboxCount?: number
 }
@@ -212,12 +173,6 @@ export function buildNotificationMessage(notifications: TurnNotifications, decor
   if (notifications.roomEntry) {
     const { room, enterMessage } = notifications.roomEntry
     parts.push(buildRoomEntryMessage(room, decorations, enterMessage))
-  }
-
-  // Budget warning
-  if (notifications.budgetWarning && notifications.budgetWarning.percentRemaining <= 20) {
-    const { remaining, percentRemaining } = notifications.budgetWarning
-    parts.push(`⚠️ Budget warning: ${percentRemaining}% remaining (${remaining.toLocaleString()} tokens). Consider wrapping up soon.`)
   }
 
   // Inbox notification

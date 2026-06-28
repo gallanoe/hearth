@@ -16,6 +16,66 @@ export function createRoutes(llm: LLMProvider, manager: AgentManager) {
     return state
   }
 
+  /**
+   * Begin the next session for an agent — the shared path for both a manual
+   * /wake and a shutdown alarm firing. Returns the new session number, or an
+   * error tag the caller maps to an HTTP status. When the session later ends
+   * with a wake alarm (SessionResult.wakeAt), re-arms a timer that calls back
+   * into beginSession, so an agent can sleep, wake itself, and sleep again with
+   * no external poke.
+   */
+  async function beginSession(
+    agentId: string,
+  ): Promise<{ session: number } | { error: "not_found" | "already_running" }> {
+    const state = manager.getState(agentId)
+    if (!state) return { error: "not_found" }
+    if (manager.isRunning(agentId)) return { error: "already_running" }
+
+    // We're starting now, so any alarm left over from a previous shutdown is moot.
+    manager.cancelWake(agentId)
+
+    const { stores } = state
+    const nextSessionNumber = await stores.sessions.getNextSessionNumber()
+
+    if (nextSessionNumber === 1) {
+      stores.letters.sendWelcomeLetterIfFirstSession()
+    }
+
+    manager.setRunning(agentId, true)
+
+    const previousSessionSummary = await stores.sessions.getPreviousSessionSummary()
+    const lastResult = manager.getLastResult(agentId)
+
+    const sessionConfig: SessionConfig = {
+      sessionNumber: nextSessionNumber,
+      budget: DEFAULT_BUDGET,
+      reflections: [],
+      inboxCount: stores.letters.getUnreadCount(),
+      previousSessionSummary: previousSessionSummary ?? lastResult?.sessionSummary ?? null,
+    }
+
+    // Fire and forget - run session asynchronously
+    runSession(llm, sessionConfig, state)
+      .then((result) => {
+        manager.setLastResult(agentId, result)
+        manager.setRunning(agentId, false)
+        console.log(`\n✅ Session ${nextSessionNumber} completed for ${agentId}: ${result.endReason}`)
+        // Honor a shutdown alarm: arm a timer to begin the following session.
+        if (result.wakeAt) {
+          manager.scheduleWake(agentId, result.wakeAt, () => {
+            void beginSession(agentId)
+          })
+          console.log(`   ⏰ Alarm set for ${agentId} at ${result.wakeAt.toISOString()}`)
+        }
+      })
+      .catch((error) => {
+        manager.setRunning(agentId, false)
+        console.error(`Error running session for ${agentId}:`, error)
+      })
+
+    return { session: nextSessionNumber }
+  }
+
   return {
     "/api/agents": {
       POST: async (req: Request) => {
@@ -65,49 +125,19 @@ export function createRoutes(llm: LLMProvider, manager: AgentManager) {
     "/api/agents/:id/wake": {
       POST: async (req: Request & { params: { id: string } }) => {
         const agentId = req.params.id
-        const state = getAgentOrFail(agentId)
-        if (!state) return Response.json({ error: "Agent not found" }, { status: 404 })
+        const result = await beginSession(agentId)
 
-        if (manager.isRunning(agentId)) {
+        if ("error" in result) {
+          if (result.error === "not_found") {
+            return Response.json({ error: "Agent not found" }, { status: 404 })
+          }
           return Response.json({ error: "Agent is already awake" }, { status: 400 })
         }
-
-        const { stores } = state
-        const nextSessionNumber = await stores.sessions.getNextSessionNumber()
-
-        if (nextSessionNumber === 1) {
-          stores.letters.sendWelcomeLetterIfFirstSession()
-        }
-
-        manager.setRunning(agentId, true)
-
-        const previousSessionSummary = await stores.sessions.getPreviousSessionSummary()
-        const lastResult = manager.getLastResult(agentId)
-
-        const sessionConfig: SessionConfig = {
-          sessionNumber: nextSessionNumber,
-          budget: DEFAULT_BUDGET,
-          reflections: [],
-          inboxCount: stores.letters.getUnreadCount(),
-          previousSessionSummary: previousSessionSummary ?? lastResult?.sessionSummary ?? null,
-        }
-
-        // Fire and forget - run session asynchronously
-        runSession(llm, sessionConfig, state)
-          .then((result) => {
-            manager.setLastResult(agentId, result)
-            manager.setRunning(agentId, false)
-            console.log(`\n✅ Session ${nextSessionNumber} completed for ${agentId}: ${result.endReason}`)
-          })
-          .catch((error) => {
-            manager.setRunning(agentId, false)
-            console.error(`Error running session for ${agentId}:`, error)
-          })
 
         return Response.json({
           success: true,
           message: `Agent ${agentId} is waking up`,
-          session: nextSessionNumber,
+          session: result.session,
         })
       },
     },

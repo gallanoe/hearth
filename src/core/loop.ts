@@ -41,6 +41,10 @@ export interface SessionResult {
   totalCost: number
   turns: TurnRecord[]
   sessionSummary: string | null // Summary of this session for the next one
+  // Real (UTC) instant the agent asked to be woken for the next session, via the
+  // shutdown tool's alarm. `null` means an indefinite shutdown (wake on external
+  // trigger only). The orchestration layer turns this into a timer.
+  wakeAt: Date | null
 }
 
 /**
@@ -116,6 +120,7 @@ async function runSessionInner(
     signals: {
       requestedSleep: false,
       requestedMove: null,
+      wakeAt: null,
     },
   }
 
@@ -551,6 +556,7 @@ async function runSessionInner(
     totalCost: finalState.totalCost,
     turns,
     sessionSummary,
+    wakeAt: context.signals.wakeAt,
   }
 }
 

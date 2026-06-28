@@ -1,16 +1,81 @@
 import { z } from "zod"
 import type { Room, ExecutableTool, ToolResult, AgentContext } from "../types/rooms"
+import {
+  REAL_MS_PER_SIM_MINUTE,
+  MAX_SIM_MINUTES,
+  wakeAtForClock,
+  describeSimElapsed,
+} from "../core/worldclock"
 
 const sleep: ExecutableTool = {
   name: "shutdown",
   description:
-    "End the session and shutdown. You will wake up here next session.",
-  inputSchema: z.object({}),
-  execute: async (_params, context): Promise<ToolResult> => {
-    // Signal that the agent wants to shutdown
-    context.signals.requestedSleep = true
+    "End the session and shut down. You wake up here next session. By default you stay " +
+    "asleep until something rouses you (someone waking you). To set an alarm, provide either " +
+    '`wake_at` (a sim clock time like "07:00") or `wake_after_sim_minutes` (a number of ' +
+    "simulated minutes); the next session then begins on its own when that sim moment arrives.",
+  inputSchema: z.object({
+    wake_at: z
+      .string()
+      .regex(/^\d{1,2}:\d{2}$/, 'Use 24-hour "HH:MM", e.g. "07:00".')
+      .optional()
+      .describe(
+        'Optional alarm: wake for the next session when the sim clock next reads this 24-hour ' +
+          '"HH:MM" (e.g. "07:00" to rise in the morning). Provide this OR `wake_after_sim_minutes`.',
+      ),
+    wake_after_sim_minutes: z
+      .number()
+      .positive()
+      .max(MAX_SIM_MINUTES)
+      .optional()
+      .describe(
+        `Optional alarm: wake for the next session after this many simulated minutes (max ` +
+          `${MAX_SIM_MINUTES}, one sim-day). Provide this OR \`wake_at\`, not both.`,
+      ),
+  }),
+  execute: async (params, context): Promise<ToolResult> => {
+    const wakeAtClock = params.wake_at as string | undefined
+    const wakeAfter = params.wake_after_sim_minutes as number | undefined
 
-    return { success: true, output: "You settle in and prepare to shutdown." }
+    // At most one alarm mode; providing both is ambiguous.
+    if (wakeAtClock != null && wakeAfter != null) {
+      return {
+        success: false,
+        output:
+          "Set at most one alarm: `wake_at` (a sim clock time) or `wake_after_sim_minutes` (a duration), not both.",
+      }
+    }
+
+    const now = new Date()
+    let wakeAt: Date | null = null
+    if (wakeAtClock != null) {
+      const [hStr, mStr] = wakeAtClock.split(":")
+      const h = Number(hStr)
+      const m = Number(mStr)
+      if (h > 23 || m > 59) {
+        return {
+          success: false,
+          output: `"${wakeAtClock}" isn't a valid time. Use 24-hour "HH:MM" between 00:00 and 23:59.`,
+        }
+      }
+      wakeAt = wakeAtForClock(now, h, m)
+    } else if (wakeAfter != null) {
+      wakeAt = new Date(now.getTime() + wakeAfter * REAL_MS_PER_SIM_MINUTE)
+    }
+
+    // Signal that the agent wants to shut down, and when (if ever) to wake it.
+    context.signals.requestedSleep = true
+    context.signals.wakeAt = wakeAt
+
+    if (wakeAt == null) {
+      return { success: true, output: "You settle in and prepare to shut down." }
+    }
+
+    const inSim = describeSimElapsed(wakeAt.getTime() - now.getTime())
+    return {
+      success: true,
+      output: `You settle in and prepare to shut down. An alarm is set to wake you in about ${inSim} of sim-time.`,
+    }
   },
 }
 

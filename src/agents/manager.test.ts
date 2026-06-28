@@ -109,6 +109,7 @@ describe("AgentManager", () => {
       totalCost: 0.01,
       turns: [],
       sessionSummary: "Agent did some work.",
+      wakeAt: null,
     }
 
     manager.setLastResult(id, fakeResult)
@@ -160,5 +161,75 @@ describe("AgentManager", () => {
 
     expect(state1.stores.letters.getUnreadCount()).toBe(1)
     expect(state2.stores.letters.getUnreadCount()).toBe(0)
+  })
+
+  describe("scheduleWake / cancelWake", () => {
+    const wait = (ms: number) => new Promise((r) => setTimeout(r, ms))
+
+    test("fires the launch callback at the wake instant", async () => {
+      const manager = createManager()
+      let fired = 0
+      manager.scheduleWake("a", new Date(Date.now() + 10), () => {
+        fired++
+      })
+
+      expect(fired).toBe(0)
+      await wait(40)
+      expect(fired).toBe(1)
+    })
+
+    test("a wake instant in the past fires promptly", async () => {
+      const manager = createManager()
+      let fired = 0
+      manager.scheduleWake("a", new Date(Date.now() - 5000), () => {
+        fired++
+      })
+
+      await wait(20)
+      expect(fired).toBe(1)
+    })
+
+    test("cancelWake stops a pending alarm from firing", async () => {
+      const manager = createManager()
+      let fired = 0
+      manager.scheduleWake("a", new Date(Date.now() + 10), () => {
+        fired++
+      })
+      manager.cancelWake("a")
+
+      await wait(40)
+      expect(fired).toBe(0)
+    })
+
+    test("scheduling again replaces the prior alarm", async () => {
+      const manager = createManager()
+      let first = 0
+      let second = 0
+      manager.scheduleWake("a", new Date(Date.now() + 200), () => {
+        first++
+      })
+      manager.scheduleWake("a", new Date(Date.now() + 10), () => {
+        second++
+      })
+
+      await wait(60)
+      expect(second).toBe(1)
+      expect(first).toBe(0)
+    })
+
+    test("destroyAgent cancels a pending alarm", async () => {
+      const manager = createManager()
+      const id = trackAgent("test-wake-destroy")
+      await manager.createAgent(id)
+
+      let fired = 0
+      manager.scheduleWake(id, new Date(Date.now() + 10), () => {
+        fired++
+      })
+      await manager.destroyAgent(id)
+
+      await wait(40)
+      expect(fired).toBe(0)
+    })
   })
 })

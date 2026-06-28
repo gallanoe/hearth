@@ -66,7 +66,7 @@ export function makeTestContext(overrides: Partial<AgentContext> = {}): AgentCon
     currentRoom: "bedroom",
     currentSession: 1,
     budget: { total: 1_000_000, spent: 0, remaining: 1_000_000, warningThreshold: 200_000 },
-    signals: { requestedSleep: false, requestedMove: null },
+    signals: { requestedSleep: false, requestedMove: null, wakeAt: null },
     ...overrides,
   }
 }

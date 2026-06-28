@@ -1,48 +1,13 @@
 import { z } from "zod"
 import type { ExecutableTool, ToolResult } from "../types/rooms"
 import type { LetterStore } from "../data/letters"
-import { REAL_MS_PER_SIM_DAY, buildTimeNote } from "../core/worldclock"
-
-/** Real milliseconds per simulated minute, derived from the day length. */
-const REAL_MS_PER_SIM_MINUTE = REAL_MS_PER_SIM_DAY / (24 * 60)
-
-/** Hard ceiling on a single wait: one full simulated day. */
-const MAX_SIM_MINUTES = 24 * 60
-
-/**
- * The real (UTC) instant at which the sim clock next reads `HH:MM`.
- *
- * The sim clock is a pure function of UTC — one sim-day per real hour, anchored
- * to the top of each real hour (see worldclock.ts) — so "wait until a sim
- * time-of-day" inverts to a single timestamp. No polling, no cron: we compute the
- * one moment and set one timer for it.
- */
-function wakeAtForClock(now: Date, hour: number, minute: number): Date {
-  const targetHourOfDay = hour + minute / 60
-  const targetIntoCycle = (targetHourOfDay / 24) * REAL_MS_PER_SIM_DAY
-  const nowMs = now.getTime()
-  const nowIntoCycle = ((nowMs % REAL_MS_PER_SIM_DAY) + REAL_MS_PER_SIM_DAY) % REAL_MS_PER_SIM_DAY
-  let delta = (((targetIntoCycle - nowIntoCycle) % REAL_MS_PER_SIM_DAY) + REAL_MS_PER_SIM_DAY) % REAL_MS_PER_SIM_DAY
-  // Already exactly at the target → wait for the next occurrence, not zero.
-  if (delta === 0) delta = REAL_MS_PER_SIM_DAY
-  return new Date(nowMs + delta)
-}
-
-/**
- * Human, sim-scaled description of a real elapsed duration. Reports cumulative
- * sim-time (real ms scaled up 24×) rather than a difference of clock readings,
- * which would wrap and under-report for waits longer than one real hour.
- */
-function describeSimElapsed(realMs: number): string {
-  const simMinutes = Math.round(realMs / REAL_MS_PER_SIM_MINUTE)
-  if (simMinutes < 1) return "less than a minute"
-  if (simMinutes < 60) return `${simMinutes} minute${simMinutes === 1 ? "" : "s"}`
-  const h = Math.floor(simMinutes / 60)
-  const m = simMinutes % 60
-  const hours = `${h} hour${h === 1 ? "" : "s"}`
-  if (m === 0) return hours
-  return `${hours} and ${m} minute${m === 1 ? "" : "s"}`
-}
+import {
+  REAL_MS_PER_SIM_MINUTE,
+  MAX_SIM_MINUTES,
+  wakeAtForClock,
+  describeSimElapsed,
+  buildTimeNote,
+} from "../core/worldclock"
 
 /**
  * Park until the wake instant or the next inbound letter, whichever comes first.

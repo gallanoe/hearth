@@ -43,6 +43,12 @@ export interface AgentContext {
   signals: {
     requestedSleep: boolean
     requestedMove: string | null
+    /**
+     * When the agent shuts down with an alarm, the real (UTC) instant at which
+     * the orchestration layer should wake it for the next session. `null` means
+     * an indefinite shutdown — the agent wakes only on an external trigger.
+     */
+    wakeAt: Date | null
   }
 }
 

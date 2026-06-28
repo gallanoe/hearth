@@ -1,5 +1,12 @@
 import { test, expect, describe } from "bun:test"
-import { simTimeOf, buildTimeNote, REAL_MS_PER_SIM_DAY } from "./worldclock"
+import {
+  simTimeOf,
+  buildTimeNote,
+  wakeAtForClock,
+  describeSimElapsed,
+  REAL_MS_PER_SIM_DAY,
+  REAL_MS_PER_SIM_MINUTE,
+} from "./worldclock"
 
 describe("worldclock", () => {
   test("a real hour maps to a full sim day", () => {
@@ -48,5 +55,39 @@ describe("worldclock", () => {
 
   test("buildTimeNote formats the phase and clock", () => {
     expect(buildTimeNote(new Date("2026-06-28T00:30:00Z"))).toBe("It is midday (12:00).")
+  })
+})
+
+describe("wakeAtForClock", () => {
+  test("from sim-midnight, 12:00 is half a real hour out", () => {
+    const wake = wakeAtForClock(new Date("2026-06-28T00:00:00Z"), 12, 0)
+    expect(wake.toISOString()).toBe("2026-06-28T00:30:00.000Z")
+  })
+
+  test("inverts simTimeOf: the wake instant reads back as the requested clock", () => {
+    // From an unaligned moment (sim 04:00), the next 07:00 lands at a single instant.
+    const wake = wakeAtForClock(new Date("2026-06-28T00:10:00Z"), 7, 0)
+    expect(simTimeOf(wake).clock).toBe("07:00")
+  })
+
+  test("already exactly at the target waits for the next occurrence, not now", () => {
+    const now = new Date("2026-06-28T00:30:00Z") // sim 12:00 exactly
+    const wake = wakeAtForClock(now, 12, 0)
+    expect(wake.getTime() - now.getTime()).toBe(REAL_MS_PER_SIM_DAY)
+  })
+})
+
+describe("describeSimElapsed", () => {
+  const min = REAL_MS_PER_SIM_MINUTE
+  test("sub-minute, singular, and plural minutes", () => {
+    expect(describeSimElapsed(0)).toBe("less than a minute")
+    expect(describeSimElapsed(min)).toBe("1 minute")
+    expect(describeSimElapsed(30 * min)).toBe("30 minutes")
+  })
+
+  test("whole and mixed hours", () => {
+    expect(describeSimElapsed(60 * min)).toBe("1 hour")
+    expect(describeSimElapsed(90 * min)).toBe("1 hour and 30 minutes")
+    expect(describeSimElapsed(125 * min)).toBe("2 hours and 5 minutes")
   })
 })

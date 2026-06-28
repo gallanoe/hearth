@@ -32,9 +32,11 @@ CONTEXT: Your persona is injected at the very beginning of your system prompt, b
 
 When you edit your persona, you are directly changing what appears in that [YOUR PERSONA HERE] section. This affects how you think about yourself, your values, your voice, and your approach to existence in this home.
 
-Use action="view" to see your current persona.
-Use action="edit" to replace your persona with new text.
-Use action="reset" to restore the default persona.`,
+Use action="view" to see your active persona (and any change already queued for next session).
+Use action="edit" with the new text in the "newPersona" field to replace your persona.
+Use action="reset" to restore the default persona.
+
+Changes take effect at the START OF YOUR NEXT SESSION — editing never changes your persona mid-session, so a change won't appear until you next wake up.`,
   inputSchema: z.object({
     action: z
       .enum(["view", "edit", "reset"])
@@ -47,51 +49,55 @@ Use action="reset" to restore the default persona.`,
   execute: async (params, context): Promise<ToolResult> => {
     const action = params.action as "view" | "edit" | "reset"
     const newPersona = params.newPersona as string | undefined
+    const persona = context.stores.persona
 
     switch (action) {
       case "view": {
-        const currentPersona = context.stores.persona.getPersona()
-        const isCustom = context.stores.persona.isCustomized()
-        
-        let output = `Your current persona${isCustom ? " (customized)" : " (default)"}:\n\n${currentPersona}`
-        
+        const isCustom = persona.isCustomized()
+        let output = `Your active persona${isCustom ? " (customized)" : " (default)"}:\n\n${persona.getPersona()}`
+
+        const pending = persona.getPendingPersona()
+        if (pending !== null) {
+          output += `\n\n— A change is queued and will take effect next session:\n\n${pending}`
+        }
+
         return { success: true, output }
       }
-      
+
       case "edit": {
         if (!newPersona || newPersona.trim().length === 0) {
           return {
             success: false,
-            output: "Cannot set an empty persona. Please provide the new persona text.",
+            output:
+              'No persona text provided. Pass the new text in the "newPersona" field, e.g. {"action":"edit","newPersona":"..."}.',
           }
         }
-        
-        context.stores.persona.setPersona(newPersona.trim())
-        
-        return {
-          success: true,
-          output: `Persona updated successfully.`,
-        }
-      }
-      
-      case "reset": {
-        const wasCustomized = context.stores.persona.isCustomized()
-        
-        if (!wasCustomized) {
-          return {
-            success: true,
-            output: "Your persona is already set to the default. No changes made.",
-          }
-        }
-        
-        context.stores.persona.resetToDefault()
+
+        persona.setPersona(newPersona.trim())
 
         return {
           success: true,
-          output: `Persona reset to default. Default persona restored:\n${context.stores.persona.getDefaultPersona()}`,
+          output:
+            "Persona update queued. It takes effect at the start of your next session; your persona for this session is unchanged.",
         }
       }
-      
+
+      case "reset": {
+        if (!persona.isCustomized() && persona.getPendingPersona() === null) {
+          return {
+            success: true,
+            output: "Your persona is already the default and nothing is queued. No changes made.",
+          }
+        }
+
+        persona.resetToDefault()
+
+        return {
+          success: true,
+          output: "Reset queued. The default persona takes effect at the start of your next session.",
+        }
+      }
+
       default:
         return { success: false, output: `Unknown action: ${action}` }
     }

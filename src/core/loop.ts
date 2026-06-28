@@ -144,6 +144,15 @@ async function runSessionInner(
   console.log(`\n☀️  Session ${config.sessionNumber} begins`)
   console.log(`📍 Bedroom`)
 
+  // Apply any persona edit queued in a previous session, then build the system
+  // prompt and the room-independent tool set ONCE for the whole session. Both are
+  // static per session — persona changes are deferred to the next session (see
+  // PersonaStore) and the tool set never varies by room — so freezing them here
+  // keeps the prompt-cache prefix identical on every turn.
+  stores.persona.activatePending()
+  const systemPrompt = buildSystemPrompt(stores.persona)
+  const tools = registry.getStaticToolDefinitions()
+
   // One turn: an LLM completion plus any tool executions it triggers. Wrapped in
   // a turn span by the main loop below so the completion and tool calls nest under
   // it in traces instead of each turn being a single opaque leaf. Defined as a
@@ -153,13 +162,6 @@ async function runSessionInner(
     // input (system + whole history) lives on the nested `completion`; here we
     // record just the latest user message — the prompt driving the turn.
     turnSpan.setInput(messages.findLast((m) => m.role === "user")?.content ?? null)
-
-    // The fixed, room-independent tool set (dispatch wrappers + universal tools).
-    // Stable across rooms, so a transition never invalidates the prompt cache.
-    const tools = registry.getStaticToolDefinitions()
-
-    // Static system prompt (cacheable).
-    const systemPrompt = buildSystemPrompt(stores.persona)
 
     // Call LLM. `availableTools` (the full injected set) is recorded by the
     // traced provider from `tools`; `roomTools` records the subset unique to the

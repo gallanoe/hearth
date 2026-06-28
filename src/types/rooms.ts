@@ -112,4 +112,5 @@ export interface UniversalTools {
   recall: ExecutableTool
   forget: ExecutableTool
   todo: ExecutableTool
+  wait: ExecutableTool
 }

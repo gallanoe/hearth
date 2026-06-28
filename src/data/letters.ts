@@ -82,6 +82,18 @@ export class LetterStore {
   private letters: Map<string, Letter> = new Map()
   private pickedUpIds: Set<string> = new Set()
   private welcomeLetterSent: boolean = false
+  private inboundListeners: Set<() => void> = new Set()
+
+  /**
+   * Subscribe to inbound-letter arrivals. The listener fires immediately after an
+   * inbound letter is added (e.g. via the POST /inbox route). Returns an
+   * unsubscribe function. Used by the `wait` tool to wake a parked turn the moment
+   * a letter lands. In-memory and single-process, like the rest of this store.
+   */
+  onInbound(listener: () => void): () => void {
+    this.inboundListeners.add(listener)
+    return () => this.inboundListeners.delete(listener)
+  }
 
   /**
    * Add an inbound letter (from user to agent).
@@ -95,6 +107,13 @@ export class LetterStore {
       readAt: null,
     }
     this.letters.set(letter.id, letter)
+    for (const listener of this.inboundListeners) {
+      try {
+        listener()
+      } catch (error) {
+        console.error("LetterStore inbound listener failed:", error)
+      }
+    }
     return letter
   }
 

@@ -7,6 +7,7 @@ import { readInbox, sendMessage } from "../tools/communication"
 import { createDecorateRoom } from "../tools/decorations"
 import { remember, recall, forget } from "../tools/memory"
 import { todo } from "../tools/todo"
+import { wait } from "../tools/wait"
 import { createExecuteRoomTool, createGetRoomToolDef } from "../tools/room-dispatch"
 
 /**
@@ -30,6 +31,7 @@ export class RoomRegistry {
       recall,
       forget,
       todo,
+      wait,
     }
   }
 
@@ -118,6 +120,7 @@ export class RoomRegistry {
       this.universalTools.recall,
       this.universalTools.forget,
       this.universalTools.todo,
+      this.universalTools.wait,
     ]
 
     return tools.map((tool) => ({
@@ -158,6 +161,7 @@ export class RoomRegistry {
     if (toolName === "recall") return this.universalTools.recall
     if (toolName === "forget") return this.universalTools.forget
     if (toolName === "todo") return this.universalTools.todo
+    if (toolName === "wait") return this.universalTools.wait
 
     // Check room-specific tools
     const room = this.rooms.get(roomId)

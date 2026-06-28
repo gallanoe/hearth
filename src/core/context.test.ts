@@ -39,6 +39,14 @@ describe("buildSystemPrompt", () => {
     expect(prompt).not.toContain("budget")
     expect(prompt).not.toContain("token")
   })
+
+  test("lists the always-available universal tools", () => {
+    const prompt = buildSystemPrompt(persona)
+    expect(prompt).toContain("Always available")
+    for (const tool of ["move_to", "decorate_room", "remember", "recall", "forget", "todo", "get_room_tool_def"]) {
+      expect(prompt).toContain(tool)
+    }
+  })
 })
 
 describe("buildWakeUpMessage", () => {
@@ -190,7 +198,7 @@ describe("buildRoomEntryMessage", () => {
     expect(msg).toContain("A room full of books.")
   })
 
-  test("lists available tools", () => {
+  test("lists the room's own tools (universal tools live in the system prompt)", () => {
     const room = makeRoom({
       tools: [{
         name: "read_book",
@@ -201,10 +209,14 @@ describe("buildRoomEntryMessage", () => {
     })
     const msg = buildRoomEntryMessage(room, decorations)
     expect(msg).toContain("read_book: Read a book.")
-    // Universal tools always listed
-    expect(msg).toContain("move_to")
-    expect(msg).toContain("remember")
-    expect(msg).toContain("todo")
+    // Universal tools are no longer repeated per room — they're in the system prompt.
+    expect(msg).not.toContain("move_to")
+    expect(msg).not.toContain("remember")
+  })
+
+  test("omits the tools section for a room with no tools", () => {
+    const msg = buildRoomEntryMessage(makeRoom({ tools: [] }), decorations)
+    expect(msg).not.toContain("Tools in this room")
   })
 
   test("includes extra context when provided", () => {

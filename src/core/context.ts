@@ -19,9 +19,12 @@ export interface WakeUpContext {
 /**
  * Builds the system prompt for the agent.
  * The persona is loaded from the persona store and placed at the very beginning,
- * followed by the mechanics section.
+ * followed by the mechanics section and the always-available (universal) tools.
  *
- * This is fully static within a session so it can be cached and read on every turn.
+ * This is static for the whole session: the persona only changes between sessions
+ * (see {@link import("../data/persona").PersonaStore}) and the universal tool list
+ * is fixed, so it can be built once and read identically on every turn — keeping
+ * the prompt cache valid.
  */
 export function buildSystemPrompt(persona: PersonaStore): string {
   const personaText = persona.getPersona()
@@ -33,17 +36,28 @@ You've been granted a virtual home to live in. You can move between rooms in you
 Mechanics:
 - You navigate between rooms using the move_to tool. Each room has its own tools; the "Tools in this room" list shown when you wake up or enter a room tells you what's available there.
 - To use one of the current room's tools, call execute_room_tool with the tool's name and its arguments. Call get_room_tool_def first if you need to see a tool's arguments.
-- A room's tools only work while you're in that room; if the tool you want lives elsewhere, move there first.`
+- A room's tools only work while you're in that room; if the tool you want lives elsewhere, move there first.
+
+Always available (call directly, in any room):
+- move_to: Move to another room in the house.
+- decorate_room: Customize this room's description.
+- remember: Store something in long-term memory.
+- recall: Search your memories and past sessions.
+- forget: Remove a memory by ID.
+- todo: Create, view, and update todos that persist across sessions.
+- get_room_tool_def: Show a room tool's input schema before you call it.`
 }
 
 /**
- * Lists the actions available in a room. Shown on wake-up and room entry.
+ * Lists the current room's own tools. Shown on wake-up and room entry.
  *
- * Room-specific tools aren't sent to the LLM as individual definitions (the tool
- * list is kept static for prompt-cache stability — see
+ * Only room-specific tools appear here — the universal tools (move_to, remember,
+ * …) live in the system prompt (see {@link buildSystemPrompt}), since they're the
+ * same in every room. Room tools aren't sent to the LLM as individual definitions
+ * (the tool list is kept static for prompt-cache stability — see
  * {@link import("../rooms/registry").RoomRegistry.getStaticToolDefinitions}), so
- * this list is the agent's catalogue of what the current room offers. Those tools
- * are invoked via execute_room_tool; the universal tools are called directly.
+ * this list is the agent's catalogue of what the current room offers; they're
+ * invoked via execute_room_tool. Returns an empty list for a room with no tools.
  */
 function buildAvailableActions(room: Room): string[] {
   const lines: string[] = []
@@ -53,17 +67,8 @@ function buildAvailableActions(room: Room): string[] {
     for (const tool of room.tools) {
       lines.push(`- ${tool.name}: ${tool.description}`)
     }
-    lines.push("")
   }
 
-  lines.push("Always available (call directly):")
-  lines.push("- move_to: Move to another room in the house.")
-  lines.push("- decorate_room: Customize this room's description.")
-  lines.push("- remember: Store something in long-term memory.")
-  lines.push("- recall: Search your memories and past sessions.")
-  lines.push("- forget: Remove a memory by ID.")
-  lines.push("- todo: Create, view, and update todos that persist across sessions.")
-  lines.push("- get_room_tool_def: Show a room tool's input schema before you call it.")
   return lines
 }
 
@@ -117,10 +122,12 @@ export function buildWakeUpMessage(context: WakeUpContext, decorations: RoomDeco
     parts.push(`${context.pendingTodoCount} pending ${plural}.`)
   }
 
-  // Available actions in the room the agent wakes up in. The full tool set is
-  // always advertised to the LLM, so this is what scopes it to the start room.
-  parts.push("")
-  parts.push(...buildAvailableActions(context.currentRoom))
+  // The start room's own tools (universal tools live in the system prompt).
+  const actions = buildAvailableActions(context.currentRoom)
+  if (actions.length > 0) {
+    parts.push("")
+    parts.push(...actions)
+  }
 
   return parts.join("\n")
 }
@@ -142,9 +149,12 @@ export function buildRoomEntryMessage(room: Room, decorations: RoomDecorationSto
     parts.push(extraContext)
   }
 
-  // List available tools
-  parts.push("")
-  parts.push(...buildAvailableActions(room))
+  // The room's own tools (universal tools live in the system prompt).
+  const actions = buildAvailableActions(room)
+  if (actions.length > 0) {
+    parts.push("")
+    parts.push(...actions)
+  }
 
   return parts.join("\n")
 }

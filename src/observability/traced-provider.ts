@@ -123,15 +123,19 @@ export interface ToolSpanHandle {
  * Wrap a single tool execution in a `tool`-type observation, nested under the
  * active turn span. `input`/`output` must be redaction-adjusted by the caller so
  * tools that opt out of persistence don't leak into traces either.
+ *
+ * Every tool span is named just `tool` (not `tool: <name>`) so the trace tree
+ * stays uniform; the specific tool name is recorded in metadata (`tool`) rather
+ * than in the span name, so it remains filterable without cluttering the label.
  */
 export async function withToolSpan<T>(
   meta: { name: string; input?: unknown; metadata?: Record<string, unknown> },
   fn: (span: ToolSpanHandle) => Promise<T>,
 ): Promise<T> {
   return startActiveObservation(
-    `tool: ${meta.name}`,
+    "tool",
     async (span) => {
-      span.update({ input: meta.input, ...(meta.metadata ? { metadata: meta.metadata } : {}) })
+      span.update({ input: meta.input, metadata: { tool: meta.name, ...meta.metadata } })
       return fn({
         setOutput: (output) => span.update({ output }),
         setError: (message) => span.update({ level: "ERROR", statusMessage: message }),

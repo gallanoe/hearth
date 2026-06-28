@@ -11,6 +11,7 @@ import {
 } from "./context"
 import { shouldCompact, compactMessages } from "./compaction"
 import { decayToolResults } from "./decay"
+import { buildTimeNote } from "./worldclock"
 import {
   withSessionTrace,
   withTurnSpan,
@@ -167,6 +168,10 @@ async function runSessionInner(
     // traced provider from `tools`; `roomTools` records the subset unique to the
     // current room, so traces show both the room-independent superset we send and
     // what the current room actually contributed.
+    //
+    // The in-world time of day rides along as an ephemeral trailing note: it
+    // changes every turn and is never persisted, so the conversation only ever
+    // holds the current moment and the cached prefix stays valid.
     const response = await llm.send(systemPrompt, messages, tools, {
       name: "completion",
       metadata: {
@@ -174,6 +179,7 @@ async function runSessionInner(
         room: context.currentRoom,
         roomTools: registry.getRoomToolNames(context.currentRoom),
       },
+      trailingNote: buildTimeNote(new Date()),
     })
 
     // Record usage

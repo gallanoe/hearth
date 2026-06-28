@@ -19,7 +19,7 @@ export function Loading({ label = "Loading…" }: { label?: string }) {
 
 export function ErrorMessage({ message }: { message: string }) {
   return (
-    <p className="rounded-control border border-red-500/25 bg-red-500/10 px-3 py-2 text-sm text-red-300">
+    <p className="rounded-control border border-alert/30 bg-alert/10 px-3 py-2 text-sm text-alert">
       {message}
     </p>
   )

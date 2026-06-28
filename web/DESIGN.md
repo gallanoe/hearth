@@ -20,22 +20,26 @@ asleep. Everything else stays quiet so this one idea carries.
 
 The contrast story is _temperature_, not just light/dark.
 
-| Token                | Hex       | Role                                          |
-| -------------------- | --------- | --------------------------------------------- |
-| `--color-base`       | `#0A0A0B` | Near-black room — the canvas                  |
-| `--color-surface`    | `#141417` | Raised panel — rail, cards                    |
-| `--color-surface-2`  | `#1C1C20` | Hover / active                                |
-| `--color-line`       | `#2A2A30` | Hairline structure (we use rules, not boxes)  |
-| `--color-text`       | `#F4F3F1` | Primary — warm paper-white, not chrome-white  |
-| `--color-muted`      | `#9A9CA4` | Secondary text, labels                        |
-| `--color-ember`      | `#FF8A4C` | **Awake** — firelight; a _glow_, never a fill |
-| `--color-ember-deep` | `#B5462A` | Low end of the ember glow                     |
-| `--color-moon`       | `#7C89A6` | **Asleep** — cool, desaturated, quiet         |
+| Token                | Hex       | Role                                                     |
+| -------------------- | --------- | -------------------------------------------------------- |
+| `--color-base`       | `#0A0A0B` | Near-black room — the canvas                             |
+| `--color-surface`    | `#141417` | Raised panel — rail, cards                               |
+| `--color-surface-2`  | `#1C1C20` | Hover / active                                           |
+| `--color-line`       | `#2A2A30` | Hairline structure (we use rules, not boxes)             |
+| `--color-text`       | `#F4F3F1` | Primary — warm paper-white, not chrome-white             |
+| `--color-muted`      | `#9A9CA4` | Secondary text, labels                                   |
+| `--color-ember`      | `#FF8A4C` | **Awake** — firelight; a _glow_, never a fill            |
+| `--color-ember-deep` | `#B5462A` | Low end of the ember glow                                |
+| `--color-moon`       | `#7C89A6` | **Asleep** — cool, desaturated, quiet                    |
+| `--color-alert`      | `#E5654E` | Errors only — leans red so it can't be read as the ember |
 
 Tailwind utilities follow the names: `bg-base`, `text-muted`, `border-line`,
 `text-ember`, etc. The ember appears as a glow behind live elements — never as a
 bright flat fill on buttons. This is a deliberate departure from the default
 "near-black + one neon accent" look: warm, stateful, with a cool counterpart.
+The lone exception to "no other colors" is `--color-alert`: errors must read as
+_wrong_, and reusing ember (which means _well_) would be a lie. It sits in the
+warm family but leans red so the two never blur.
 
 ## Typography — two worlds
 
@@ -68,6 +72,19 @@ The one memorable element; everything else stays disciplined around it.
   The room feels dormant.
 - It's real-time: SSE drives it, so you watch the house warm up when an agent
   wakes and a message streams in.
+
+## Transcript — voice over instrument
+
+The session transcript is the one place voice and instrument sit side by side, so
+the type roles do the sorting. The agent's turns are the **inhabitant** (serif,
+under the agent's own name); tool calls are the **instrument** — folded into
+collapsed-by-default cards (`ToolCard`, a native `<details>`) so mechanics never
+drown the thinking. A collapsed card reads like a sentence (`bash  ls -la`,
+`move_to  → office`); expanding reveals arguments and result. A call whose result
+hasn't streamed in yet **breathes** the ember dot and reads _running_ — the same
+vital sign, applied to a single action. The shell is fixed to the viewport
+(`h-dvh`); the rail and transcript scroll independently, and a sticky header keeps
+the session number and live state in view through a long scroll.
 
 ## Motion
 

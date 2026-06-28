@@ -31,7 +31,9 @@ export default function Layout() {
   const agents = data?.agents ?? []
 
   return (
-    <div className="flex min-h-screen">
+    // Fixed to the viewport: the rail and main scroll independently, so a long
+    // transcript never stretches the sidebar with it.
+    <div className="flex h-dvh overflow-hidden">
       <aside className="flex w-64 shrink-0 flex-col border-r border-line bg-surface">
         <div className="border-b border-line px-5 py-5">
           <NavLink to="/" className="font-serif text-xl tracking-tight">
@@ -47,7 +49,7 @@ export default function Layout() {
             Agents
           </div>
           {loading && <p className="px-2 text-sm text-muted">Loading…</p>}
-          {error && <p className="px-2 text-sm text-red-400">{error}</p>}
+          {error && <p className="px-2 text-sm text-alert">{error}</p>}
           {!loading && !error && agents.length === 0 && (
             <p className="px-2 text-sm text-muted">No agents yet.</p>
           )}
@@ -93,7 +95,7 @@ export default function Layout() {
             </button>
           </div>
           {createError && (
-            <p className="mt-1.5 px-1 text-xs text-red-400">{createError}</p>
+            <p className="mt-1.5 px-1 text-xs text-alert">{createError}</p>
           )}
         </form>
       </aside>

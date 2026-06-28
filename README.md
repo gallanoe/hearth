@@ -94,6 +94,17 @@ bun run dev          # http://localhost:5173
 
 The dev server proxies `/api/*` to the backend at `http://localhost:3000` (see `web/vite.config.ts`), so start the backend first. For a production build, run `bun run build` (outputs to `web/dist/`) and serve it with `bun run preview`.
 
+### Library books (optional)
+
+The library shelves are empty until you seed them. Each book is just a `.txt` file in `assets/books/` — the filename becomes the title (`pride-and-prejudice.txt` → *"Pride and Prejudice"*) and the runtime loads the directory on startup. The seed script downloads a curated set of public-domain classics from Project Gutenberg plus Claude's Constitution:
+
+```bash
+bun run seed:books           # download anything missing
+bun run seed:books --force   # re-download everything
+```
+
+The downloaded `.txt` files are gitignored. To add your own book, drop a kebab-case `.txt` file into `assets/books/` (or add a source to `scripts/seed-books.ts`) and restart the backend. If running in Docker, seed before building the image — the books are copied in at build time, not mounted.
+
 ## API
 
 | Endpoint | Method | Description |

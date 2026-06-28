@@ -4,7 +4,8 @@
   "type": "module",
   "private": true,
   "scripts": {
-    "typecheck": "tsc --noEmit && tsc -b web"
+    "typecheck": "tsc --noEmit && tsc -b web",
+    "seed:books": "bun run scripts/seed-books.ts"
   },
   "devDependencies": {
     "@types/bun": "latest",

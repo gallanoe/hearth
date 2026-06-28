@@ -6,6 +6,9 @@ out
 dist
 *.tgz
 
+# preloaded books (fetched on demand via `bun run seed:books`)
+assets/books/*.txt
+
 # code coverage
 coverage
 *.lcov
